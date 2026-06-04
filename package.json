@@ -1,0 +1,36 @@
+{
+  "name": "ingestion-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test:send": "tsx tests/send/send_integration_test.ts",
+    "test:e2e": "tsx tests/e2e/smoke.ts"
+  },
+  "dependencies": {
+     "@aws-sdk/client-s3": "^3.604.0",
+    "bullmq": "^5.8.0",
+    "csv-parse": "^5.5.6",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "ioredis": "^5.4.1",
+    "luxon": "^3.5.0",
+    "pg": "^8.12.0"
+  },
+  "optionalDependencies": {
+    "nodemailer": "^6.9.4"
+  },
+  "peerDependencies": {
+    "discord.js": "^14.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4",
+    "smtp-server": "^3.8.0",
+    "mailparser": "^3.10.0"
+  }
+}
