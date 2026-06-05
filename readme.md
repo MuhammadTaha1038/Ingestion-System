@@ -22,13 +22,25 @@ npm run dev
 ```
 
 Environment
-- Set `DATABASE_URL`, `REDIS_URL`, `ENCRYPTION_KEY` (32+ chars), and optionally `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` for Discord features.
+- Set `DATABASE_URL`, `REDIS_URL`, `ENCRYPTION_KEY` (32+ chars), and optionally `DISCORD_BOT_TOKEN`, `DISCORD_APP_ID`, `DISCORD_SERVER_ID` for Discord features.
 
 Testing
 - Integration SMTP test:
 
 ```bash
 npm run test:send
+```
+
+- Gmail SMTP test (requires SMTP_TEST_EMAIL / SMTP_TEST_APP_PASSWORD in `.env`):
+
+```bash
+npm run test:gmail
+```
+
+- Full environment smoke test (requires DB + Redis):
+
+```bash
+npm run test:e2e
 ```
 
 Notes

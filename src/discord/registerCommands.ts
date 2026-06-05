@@ -8,8 +8,8 @@ const logger = createLogger(config.logLevel);
 
 export const registerCommands = async (): Promise<void> => {
   const token = process.env.DISCORD_BOT_TOKEN;
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const guildId = process.env.DISCORD_GUILD_ID;
+  const clientId = process.env.DISCORD_APP_ID;
+  const guildId = process.env.DISCORD_SERVER_ID;
   if (!token || !clientId || !guildId) {
     logger.warn("discord register: missing env vars, skipping registration");
     return;

@@ -46,8 +46,8 @@ Required environment variables for full smoke test:
 - `REDIS_URL`
 - `ENCRYPTION_KEY`
 - `DISCORD_BOT_TOKEN`
-- `DISCORD_CLIENT_ID`
-- `DISCORD_GUILD_ID`
+- `DISCORD_APP_ID`
+- `DISCORD_SERVER_ID`
 - `S3_ENDPOINT`
 - `S3_REGION`
 - `S3_BUCKET`
