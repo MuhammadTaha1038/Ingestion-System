@@ -23,10 +23,13 @@ This runbook lists steps to deploy the Phase 1 MVP to a Linux VM.
     - `RUN_SENDING_WORKER=true`
     - `RUN_WINDOW_RESETTER=true`
     - `RUN_DISCORD_BOT=true`
+  - Sample systemd unit and healthcheck are in `ops/`
 
 5. Health checks
   - API health: `GET /health`
   - Queue status: `GET /queue`
+  - Metrics: `GET /metrics`
+  - Logs: `GET /logs`
 
 6. Rollback
   - Keep previous release and restart with previous build.

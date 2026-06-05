@@ -1,0 +1,14 @@
+[Unit]
+Description=Ingestion System API and Workers
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ingestion-system
+EnvironmentFile=/opt/ingestion-system/.env
+ExecStart=/usr/bin/node /opt/ingestion-system/dist/main.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
