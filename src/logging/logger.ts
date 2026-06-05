@@ -7,11 +7,26 @@ export interface Logger {
   error: (message: string, meta?: Record<string, unknown>) => void;
 }
 
+export interface LogEntry {
+  ts: string;
+  level: LogLevel;
+  message: string;
+  meta?: Record<string, unknown>;
+}
+
 const LEVELS: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
   warn: 30,
   error: 40
+};
+
+const LOG_BUFFER_LIMIT = 2000;
+const logBuffer: LogEntry[] = [];
+
+export const getRecentLogs = (limit = 100): LogEntry[] => {
+  if (limit <= 0) return [];
+  return logBuffer.slice(-limit);
 };
 
 const normalizeLevel = (value: string | undefined): LogLevel => {
@@ -33,6 +48,11 @@ export const createLogger = (minLevel?: string): Logger => {
   ): void => {
     if (LEVELS[level] < threshold) {
       return;
+    }
+
+    logBuffer.push({ ts: new Date().toISOString(), level, message, meta });
+    if (logBuffer.length > LOG_BUFFER_LIMIT) {
+      logBuffer.shift();
     }
 
     const payload = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";

@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { loadConfig } from "../../config/config.js";
-import { createLogger } from "../../logging/logger.js";
+import { createLogger, getRecentLogs } from "../../logging/logger.js";
 import { DatasetRepository } from "../../db/repositories/datasets.js";
 import { JobRepository } from "../../db/repositories/jobs.js";
 import { HierarchyRepository } from "../../db/repositories/hierarchy.js";
@@ -561,7 +561,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
     reply.send(ok({ status: "running" }));
   });
 
-  server.get("/logs", async (_request, reply) => {
-    reply.send(notReady("logs"));
+  server.get("/logs", async (request, reply) => {
+    const query = request.query as Record<string, string | undefined> | undefined;
+    const limit = Number(query?.limit ?? 100);
+    reply.send(ok({ logs: getRecentLogs(Number.isNaN(limit) ? 100 : limit) }));
   });
 };
