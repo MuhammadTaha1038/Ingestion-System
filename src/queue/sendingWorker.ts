@@ -20,7 +20,7 @@ export const startSendingWorker = (): void => {
 
     // Process recipients provided by the job. If none provided, use batchSize as a placeholder.
     const recipients = job.data.recipients ?? [];
-    const batchSize = job.data.batchSize ?? recipients.length || 1;
+    const batchSize = job.data.batchSize ?? (recipients.length || 1);
 
     if (recipients.length === 0) {
       logger.warn("no recipients provided in job; nothing to send");

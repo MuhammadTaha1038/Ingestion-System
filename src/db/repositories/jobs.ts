@@ -11,7 +11,7 @@ export interface JobCounts {
 }
 
 export class JobRepository {
-  private readonly pool: Pool;
+  public readonly pool: Pool;
 
   constructor(pool?: Pool) {
     this.pool = pool ?? getDatabasePool();

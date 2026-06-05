@@ -6,6 +6,7 @@ export interface DirectSmtpConfig {
   secure?: boolean;
   username?: string;
   password?: string;
+  ignoreTLS?: boolean;
 }
 
 export const sendDirect = async (
@@ -19,6 +20,7 @@ export const sendDirect = async (
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure ?? false,
+    ignoreTLS: cfg.ignoreTLS ?? false,
     auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
   });
 

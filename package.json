@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "test:send": "tsx tests/send/send_integration_test.ts",
+    "test:gmail": "tsx tests/send/gmail_integration_test.ts",
     "test:e2e": "tsx tests/e2e/smoke.ts"
   },
   "dependencies": {
@@ -28,9 +29,12 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.10",
+    "@types/luxon": "^3.4.2",
+    "@types/nodemailer": "^6.4.17",
     "tsx": "^4.17.0",
     "typescript": "^5.5.4",
     "smtp-server": "^3.8.0",
-    "mailparser": "^3.10.0"
+    "mailparser": "^3.9.9"
   }
 }

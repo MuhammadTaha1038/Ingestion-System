@@ -21,7 +21,7 @@ export interface SmtpUsageRecord {
 }
 
 export class SmtpRepository {
-  private readonly pool: Pool;
+  public readonly pool: Pool;
 
   constructor(pool?: Pool) {
     this.pool = pool ?? getDatabasePool();

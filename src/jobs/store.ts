@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { JobRecord, JobStatus, JobSummary, JobType } from "./types.js";
+import { JobRecord, JobSummary, JobType } from "./types.js";
+import { JobStatus } from "../types/index.js";
 
 export interface JobStore {
   createJob: (type: JobType, payload?: Record<string, unknown>) => JobRecord;

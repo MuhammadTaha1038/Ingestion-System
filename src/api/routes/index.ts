@@ -14,10 +14,13 @@ const notReady = (feature: string) => ({
   feature
 });
 
-const ok = (data: Record<string, unknown>) => ({
-  ok: true,
-  ...data
-});
+const ok = (data: unknown) => {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return { ok: true, ...(data as Record<string, unknown>) };
+  }
+
+  return { ok: true, data };
+};
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -369,7 +372,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
-    const id = request.params && (request.params as Record<string, string>).id;
+    const id = (request.params as { id?: string }).id;
     const body = request.body as Record<string, unknown> | undefined;
     if (!id || !body) {
       reply.code(400).send({ error: "invalid_request" });
@@ -401,7 +404,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
-    const id = request.params && (request.params as Record<string, string>).id;
+    const id = (request.params as { id?: string }).id;
     if (!id) {
       reply.code(400).send({ error: "invalid_request" });
       return;
@@ -422,7 +425,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
-    const id = request.params && (request.params as Record<string, string>).id;
+    const id = (request.params as { id?: string }).id;
     if (!id) {
       reply.code(400).send({ error: "invalid_request" });
       return;
@@ -500,9 +503,6 @@ export const registerRoutes = (server: FastifyInstance): void => {
   server.put("/campaigns/:id", async (_request, reply) => {
     reply.send(notReady("campaign_update"));
   });
-  server.put("/campaigns/:id", async (_request, reply) => {
-    reply.send(notReady("campaign_update"));
-  });
 
   server.get("/campaigns", async (_request, reply) => {
     if (!config.databaseUrl) {
@@ -525,7 +525,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
-    const id = request.params && (request.params as Record<string, string>).id;
+    const id = (request.params as { id?: string }).id;
     if (!id) {
       reply.code(400).send({ error: "invalid_request" });
       return;
@@ -535,13 +535,13 @@ export const registerRoutes = (server: FastifyInstance): void => {
       const pool = await (await import("../../db/pool.js")).getDatabasePool();
       // fetch recipients for a campaign by joining recipients/sending_tasks
       const res = await pool.query(`SELECT r.email_normalized FROM recipients r`);
-      const emails = res.rows.map((r: any) => r.email_normalized as string);
+      const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
 
       const { sendingQueue } = await import("../../queue/queues.js");
 
       const batchSize = 50;
       for (let i = 0; i < emails.length; i += batchSize) {
-        const batch = emails.slice(i, i + batchSize).map((e) => ({ to: e, subject: "Campaign", html: "<p>Campaign body</p>" }));
+        const batch = emails.slice(i, i + batchSize).map((email: string) => ({ to: email, subject: "Campaign", html: "<p>Campaign body</p>" }));
         await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
       }
 

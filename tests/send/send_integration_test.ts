@@ -23,7 +23,7 @@ const run = async () => {
   console.log("SMTP test server listening on", PORT);
 
   try {
-    await sendDirect({ host: "127.0.0.1", port: PORT, secure: false }, "test@example.com", "Test Subject", "<p>hi</p>");
+    await sendDirect({ host: "127.0.0.1", port: PORT, secure: false, ignoreTLS: true }, "test@example.com", "Test Subject", "<p>hi</p>");
 
     // wait briefly for server to process
     await new Promise((r) => setTimeout(r, 500));

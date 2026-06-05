@@ -1,0 +1,61 @@
+# Client Handoff - Phase 1 MVP
+
+## What is included
+
+- Ingestion pipeline for CSV, JSON, TXT, raw text, and bulk pasted content.
+- Normalization, validation, and global deduplication.
+- PostgreSQL-backed persistence for datasets, jobs, campaigns, SMTP accounts, usage, and failures.
+- Redis/BullMQ queueing for ingestion and sending.
+- S3-compatible artifact storage for processed outputs and reports.
+- Discord control plane with slash commands for core operations.
+- SMTP sending worker with retries, per-window limits, and failure auto-disable.
+- Metrics and health endpoints for operational visibility.
+
+## How it is built
+
+- Runtime: Node.js + TypeScript.
+- API: Fastify.
+- Queue: BullMQ + Redis.
+- Database: PostgreSQL.
+- Storage: S3-compatible bucket.
+- Discord: discord.js.
+- Mail sending: nodemailer.
+
+## How to test
+
+1. Install dependencies:
+
+```bash
+npm ci
+```
+
+2. Run the SMTP integration smoke test:
+
+```bash
+npm run test:send
+```
+
+3. Run the full environment smoke test:
+
+```bash
+npm run test:e2e
+```
+
+Required environment variables for full smoke test:
+- `DATABASE_URL`
+- `REDIS_URL`
+- `ENCRYPTION_KEY`
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_CLIENT_ID`
+- `DISCORD_GUILD_ID`
+- `S3_ENDPOINT`
+- `S3_REGION`
+- `S3_BUCKET`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+
+## Operational notes
+
+- Keep SMTP credentials in `.env`, not in git.
+- For Gmail testing, use an app password rather than a normal account password.
+- Phase 1 scope is complete for the MVP delivery path; Phase 2 items remain deferred.

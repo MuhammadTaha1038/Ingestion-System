@@ -21,7 +21,7 @@ export const startDiscordBot = async (): Promise<void> => {
   });
   client.on("interactionCreate", async (interaction) => {
     try {
-      if (!interaction.isCommand()) return;
+      if (!interaction.isChatInputCommand()) return;
       const { commandName, options } = interaction;
 
       if (commandName === "smtp-list") {
