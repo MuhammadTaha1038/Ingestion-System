@@ -4,7 +4,7 @@ This runbook lists steps to deploy the Phase 1 MVP to a Linux VM.
 
 1. Provision server(s)
   - Ubuntu 22.04 LTS
-  - Install Node.js 18+, PostgreSQL, Redis
+  - Install Node.js 20+, PostgreSQL, Redis
 
 2. Environment and secrets
   - `DATABASE_URL` (postgres)

@@ -13,7 +13,7 @@
 
 ## How it is built
 
-- Runtime: Node.js + TypeScript.
+- Runtime: Node.js 20+ + TypeScript.
 - API: Fastify.
 - Queue: BullMQ + Redis.
 - Database: PostgreSQL.
