@@ -3,7 +3,7 @@
 Minimal README to run the MVP locally for review and testing.
 
 Requirements
-- Node.js 18+
+- Node.js 20+
 - PostgreSQL (optional for database-backed features)
 - Redis (optional for queues)
 
