@@ -10,7 +10,10 @@ export const getRedisConnection = (): any => {
       throw new Error("REDIS_URL is required for queue connections");
     }
 
-    sharedConnection = new (IORedis as any)(config.redisUrl);
+    sharedConnection = new (IORedis as any)(config.redisUrl, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false
+    });
   }
 
   return sharedConnection;
