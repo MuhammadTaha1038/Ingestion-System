@@ -204,12 +204,9 @@ Discord is the primary operational interface for all core operations.
 - /smtp-enable
 - /job-status
 - /campaign-create
+- /campaign-update
 - /campaign-list
 - /campaign-send
-
-### Phase 1 Commands (Not yet implemented)
-
-- /campaign-update
 
 ### Client clarifications (2026-06-04)
 

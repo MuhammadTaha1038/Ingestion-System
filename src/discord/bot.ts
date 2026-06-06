@@ -222,6 +222,64 @@ export const startDiscordBot = async (): Promise<void> => {
         return;
       }
 
+      if (commandName === "campaign-update") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const id = options.getString("id", true);
+        const body: Record<string, unknown> = {};
+        const name = options.getString("name");
+        const subject = options.getString("subject");
+        const bodyHtml = options.getString("body_html");
+        const bodyText = options.getString("body_text");
+        const fromAddress = options.getString("from_address");
+        const replyTo = options.getString("reply_to");
+        const status = options.getString("status");
+
+        if (name) body.name = name;
+        if (subject) body.subject = subject;
+        if (bodyHtml) body.body_html = bodyHtml;
+        if (bodyText) body.body_text = bodyText;
+        if (fromAddress) body.from_address = fromAddress;
+        if (replyTo) body.reply_to = replyTo;
+        if (status) body.status = status;
+
+        if (Object.keys(body).length === 0) {
+          await commandInteraction.editReply("no_fields_to_update");
+          return;
+        }
+
+        const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
+        if (typeof body.status === "string" && !allowedStatuses.has(body.status)) {
+          await commandInteraction.editReply("invalid_status");
+          return;
+        }
+
+        const pool = getDatabasePool();
+        const fields: string[] = [];
+        const values: unknown[] = [];
+        for (const [key, value] of Object.entries(body)) {
+          fields.push(`${key} = $${fields.length + 1}`);
+          values.push(value);
+        }
+
+        values.push(id);
+        const res = await pool.query(
+          `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id, name, subject, status, updated_at`,
+          values
+        );
+
+        if (!res.rows[0]) {
+          await commandInteraction.editReply("not_found");
+          return;
+        }
+
+        await commandInteraction.editReply(truncate(`updated campaign ${res.rows[0].id} ${res.rows[0].name} [${res.rows[0].status}]`));
+        return;
+      }
+
       if (commandName === "campaign-send") {
         const id = options.getString("id", true);
         if (!config.databaseUrl) {

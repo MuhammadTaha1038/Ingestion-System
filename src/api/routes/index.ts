@@ -500,8 +500,85 @@ export const registerRoutes = (server: FastifyInstance): void => {
     }
   });
 
-  server.put("/campaigns/:id", async (_request, reply) => {
-    reply.send(notReady("campaign_update"));
+  server.put("/campaigns/:id", async (request, reply) => {
+    if (!config.databaseUrl) {
+      reply.send(notReady("db_required"));
+      return;
+    }
+
+    const id = (request.params as { id?: string }).id;
+    const body = request.body as Record<string, unknown> | undefined;
+    if (!id || !body) {
+      reply.code(400).send({ error: "invalid_request" });
+      return;
+    }
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    if (typeof body.name === "string") {
+      fields.push(`name = $${fields.length + 1}`);
+      values.push(body.name);
+    }
+
+    if (typeof body.subject === "string") {
+      fields.push(`subject = $${fields.length + 1}`);
+      values.push(body.subject);
+    }
+
+    if (typeof body.body_html === "string") {
+      fields.push(`body_html = $${fields.length + 1}`);
+      values.push(body.body_html);
+    }
+
+    if (typeof body.body_text === "string") {
+      fields.push(`body_text = $${fields.length + 1}`);
+      values.push(body.body_text);
+    }
+
+    if (typeof body.from_address === "string") {
+      fields.push(`from_address = $${fields.length + 1}`);
+      values.push(body.from_address);
+    }
+
+    if (typeof body.reply_to === "string") {
+      fields.push(`reply_to = $${fields.length + 1}`);
+      values.push(body.reply_to);
+    }
+
+    if (typeof body.status === "string") {
+      const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
+      if (!allowedStatuses.has(body.status)) {
+        reply.code(400).send({ error: "invalid_status" });
+        return;
+      }
+
+      fields.push(`status = $${fields.length + 1}`);
+      values.push(body.status);
+    }
+
+    if (fields.length === 0) {
+      reply.code(400).send({ error: "no_fields_to_update" });
+      return;
+    }
+
+    try {
+      const pool = await (await import("../../db/pool.js")).getDatabasePool();
+      values.push(id);
+      const res = await pool.query(
+        `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id, name, subject, status, updated_at`,
+        values
+      );
+
+      if (!res.rows[0]) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+
+      reply.send(ok({ campaign: res.rows[0] }));
+    } catch (err) {
+      reply.code(500).send({ error: "internal_error" });
+    }
   });
 
   server.get("/campaigns", async (_request, reply) => {
