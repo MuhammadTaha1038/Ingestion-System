@@ -25,6 +25,10 @@ Set these in `.env` on the server:
 - DISCORD_APP_ID
 - DISCORD_SERVER_ID
 
+Notes:
+- Use exact S3 region code supported by the provider (for example `us-central-1`), not a display label like `US Central`.
+- If storage is not AWS S3, `S3_ENDPOINT` is required.
+
 Optional (for SMTP tests):
 - SMTP_TEST_EMAIL
 - SMTP_TEST_APP_PASSWORD
@@ -66,7 +70,7 @@ Optional (for SMTP tests):
 
 - POST /ingest with:
   - format: csv | json | txt | raw | bulk
-  - content: small sample dataset
+  - content: small sample dataset OR sourcePath: http(s)://, file://, or s3://
 - Verify:
   - GET /status shows job status
   - Output artifacts created (S3 or local fallback)
@@ -105,21 +109,30 @@ Optional (for SMTP tests):
 
 - In Discord, verify slash commands:
   - /ingest
+  - /health
   - /status
   - /queue
+  - /metrics
   - /logs
   - /pause
   - /resume
   - /smtp-status
   - /accounts-status
   - /smtp-list
+  - /smtp-usage
+  - /smtp-failures
   - /smtp-disable
   - /smtp-enable
   - /job-status
   - /campaign-list
   - /campaign-create
+  - /campaign-update
   - /campaign-send
 - Confirm results match API state
+
+Discord ingest notes:
+- `/ingest` accepts inline `content`, `source_path`, or an attached file URL via `file`.
+- For real document testing, prefer `source_path` to `s3://bucket/key` so storage read/write is validated.
 
 ## 14) Failure Handling Test
 

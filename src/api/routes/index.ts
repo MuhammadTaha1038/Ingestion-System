@@ -610,6 +610,13 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
     try {
       const pool = await (await import("../../db/pool.js")).getDatabasePool();
+      const campaignRes = await pool.query(`SELECT subject, body_html, body_text FROM campaigns WHERE id = $1`, [id]);
+      if (!campaignRes.rows[0]) {
+        reply.code(404).send({ error: "not_found" });
+        return;
+      }
+
+      const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
       // fetch recipients for a campaign by joining recipients/sending_tasks
       const res = await pool.query(`SELECT r.email_normalized FROM recipients r`);
       const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
@@ -618,7 +625,12 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
       const batchSize = 50;
       for (let i = 0; i < emails.length; i += batchSize) {
-        const batch = emails.slice(i, i + batchSize).map((email: string) => ({ to: email, subject: "Campaign", html: "<p>Campaign body</p>" }));
+        const batch = emails.slice(i, i + batchSize).map((email: string) => ({
+          to: email,
+          subject: campaign.subject,
+          html: campaign.body_html,
+          text: campaign.body_text ?? undefined
+        }));
         await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
       }
 

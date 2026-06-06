@@ -46,12 +46,19 @@ export const startDiscordBot = async (): Promise<void> => {
 
       if (commandName === "ingest") {
         const format = options.getString("format", true);
-        const content = options.getString("content", true);
-        const sourcePath = options.getString("source_path") ?? undefined;
+        const content = options.getString("content") ?? "";
+        const sourcePathOption = options.getString("source_path") ?? undefined;
+        const attachment = options.getAttachment("file");
+        const sourcePath = sourcePathOption ?? attachment?.url;
         const campaignId = options.getString("campaign_id") ?? undefined;
 
         if (!allowedFormats.has(format)) {
           await commandInteraction.editReply("invalid_format");
+          return;
+        }
+
+        if (!content.trim() && !sourcePath) {
+          await commandInteraction.editReply("missing_content_or_source_path");
           return;
         }
 
@@ -99,6 +106,11 @@ export const startDiscordBot = async (): Promise<void> => {
         return;
       }
 
+      if (commandName === "health") {
+        await commandInteraction.editReply("ok");
+        return;
+      }
+
       if (commandName === "status") {
         const jobId = options.getString("job_id");
         if (jobId) {
@@ -119,6 +131,30 @@ export const startDiscordBot = async (): Promise<void> => {
       if (commandName === "queue") {
         const status = await getQueueStatus();
         await commandInteraction.editReply(truncate(JSON.stringify(status, null, 2)));
+        return;
+      }
+
+      if (commandName === "metrics") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const pool = getDatabasePool();
+        const jobsRes = await pool.query(`SELECT status, count(*)::int AS count FROM jobs GROUP BY status ORDER BY status`);
+        const usageRes = await pool.query(`SELECT smtp_account_id, COALESCE(SUM(used_count), 0)::int as total_used FROM smtp_usage GROUP BY smtp_account_id ORDER BY total_used DESC LIMIT 20`);
+        await commandInteraction.editReply(
+          truncate(
+            JSON.stringify(
+              {
+                jobs: jobsRes.rows,
+                smtpUsage: usageRes.rows
+              },
+              null,
+              2
+            )
+          )
+        );
         return;
       }
 
@@ -157,6 +193,44 @@ export const startDiscordBot = async (): Promise<void> => {
         const list = await repo.listAllAccounts();
         const lines = list.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`);
         await commandInteraction.editReply(lines.join("\n") || "no_accounts");
+        return;
+      }
+
+      if (commandName === "smtp-usage") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const windowId = options.getString("window_id");
+        const pool = getDatabasePool();
+        if (windowId) {
+          const res = await pool.query(
+            `SELECT smtp_account_id, used_count FROM smtp_usage WHERE window_id = $1 ORDER BY used_count DESC`,
+            [windowId]
+          );
+          await commandInteraction.editReply(truncate(JSON.stringify({ usage: res.rows }, null, 2)));
+          return;
+        }
+
+        const res = await pool.query(
+          `SELECT id, window_start, window_end, status FROM sending_windows ORDER BY window_start DESC LIMIT 10`
+        );
+        await commandInteraction.editReply(truncate(JSON.stringify({ windows: res.rows }, null, 2)));
+        return;
+      }
+
+      if (commandName === "smtp-failures") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const pool = getDatabasePool();
+        const res = await pool.query(
+          `SELECT smtp_account_id, consecutive_failures, last_failure_at FROM smtp_failures ORDER BY last_failure_at DESC LIMIT 20`
+        );
+        await commandInteraction.editReply(truncate(JSON.stringify({ failures: res.rows }, null, 2)));
         return;
       }
 
@@ -288,12 +362,24 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const pool = getDatabasePool();
+        const campaignRes = await pool.query(`SELECT subject, body_html, body_text FROM campaigns WHERE id = $1`, [id]);
+        if (!campaignRes.rows[0]) {
+          await commandInteraction.editReply("campaign_not_found");
+          return;
+        }
+
+        const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
         const res = await pool.query(`SELECT r.email_normalized FROM recipients r`);
         const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
         const batchSize = 50;
 
         for (let i = 0; i < emails.length; i += batchSize) {
-          const batch = emails.slice(i, i + batchSize).map((email: string) => ({ to: email, subject: "Campaign", html: "<p>Campaign body</p>" }));
+          const batch = emails.slice(i, i + batchSize).map((email: string) => ({
+            to: email,
+            subject: campaign.subject,
+            html: campaign.body_html,
+            text: campaign.body_text ?? undefined
+          }));
           await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
         }
 

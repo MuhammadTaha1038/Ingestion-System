@@ -20,14 +20,17 @@ export const registerCommands = async (): Promise<void> => {
   const commands = [
     { name: "ingest", description: "Trigger ingestion", options: [
       { name: "format", type: 3, description: "csv, json, txt, raw, bulk", required: true },
-      { name: "content", type: 3, description: "dataset content", required: true },
+      { name: "content", type: 3, description: "dataset content", required: false },
       { name: "source_path", type: 3, description: "optional source path", required: false },
+      { name: "file", type: 11, description: "optional attachment URL source", required: false },
       { name: "campaign_id", type: 3, description: "optional campaign id", required: false }
     ] },
+    { name: "health", description: "Show service health" },
     { name: "status", description: "Get job summary or job status", options: [
       { name: "job_id", type: 3, description: "optional job id", required: false }
     ] },
     { name: "queue", description: "Show queue status" },
+    { name: "metrics", description: "Show aggregated job and SMTP usage metrics" },
     { name: "logs", description: "Show recent logs", options: [
       { name: "limit", type: 4, description: "number of log lines", required: false }
     ] },
@@ -36,6 +39,10 @@ export const registerCommands = async (): Promise<void> => {
     { name: "smtp-status", description: "Show active SMTP accounts" },
     { name: "accounts-status", description: "Show account status" },
     { name: "smtp-list", description: "List SMTP accounts" },
+    { name: "smtp-usage", description: "Show SMTP usage windows or usage by window", options: [
+      { name: "window_id", type: 3, description: "optional sending window id", required: false }
+    ] },
+    { name: "smtp-failures", description: "Show recent SMTP failures (alerts)" },
     { name: "smtp-disable", description: "Disable SMTP account", options: [{ name: "id", type: 3, description: "account id", required: true }] },
     { name: "smtp-enable", description: "Enable SMTP account", options: [{ name: "id", type: 3, description: "account id", required: true }] },
     { name: "job-status", description: "Get job status", options: [{ name: "id", type: 3, description: "job id", required: true }] },
