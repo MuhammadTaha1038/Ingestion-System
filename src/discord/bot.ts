@@ -31,7 +31,7 @@ export const startDiscordBot = async (): Promise<void> => {
     return;
   }
 
-  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] as any, partials: [Partials.Channel] });
+  const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
 
   client.on("ready", () => {
     logger.info("discord bot ready", { user: client.user?.tag });
