@@ -10,7 +10,7 @@ This runbook lists steps to deploy the Phase 1 MVP to a Linux VM.
   - `DATABASE_URL` (postgres)
   - `REDIS_URL`
   - `ENCRYPTION_KEY` (32+ chars)
-  - `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` (optional)
+  - `DISCORD_BOT_TOKEN`, `DISCORD_APP_ID`, `DISCORD_SERVER_ID` (required for Discord commands)
 
 3. Build and run
   - Clone repo, install deps `npm ci`

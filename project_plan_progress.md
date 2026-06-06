@@ -7,25 +7,26 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 ## 1. Current Status
 
 - Date: 2026-06-04
+- Date: 2026-06-06
 - Phase: Phase 1 (MVP)
-- Status: In progress
+- Status: Implementation largely complete; delivery validation pending
 
 ---
 
 ## 2. Phase 1 Milestones (MVP)
 
-- [ ] Infrastructure setup and hardening
-- [ ] Storage integration and validation
-- [ ] Core services scaffold (API, workers, scheduler)
-- [ ] Ingestion pipeline (format-agnostic)
-- [ ] Global deduplication store
-- [ ] Queue and job lifecycle
-- [ ] SMTP manager with rate limits and account hierarchy
-- [ ] Sending engine and retries
-- [ ] Discord primary control plane (all ops via commands)
-- [ ] Logging and reports
+- [x] Infrastructure setup and hardening
+- [x] Storage integration and validation
+- [x] Core services scaffold (API, workers, scheduler)
+- [x] Ingestion pipeline (format-agnostic)
+- [x] Global deduplication store
+- [x] Queue and job lifecycle
+- [x] SMTP manager with rate limits and account hierarchy
+- [x] Sending engine and retries
+- [x] Discord primary control plane (core ops via commands)
+- [x] Logging and reports
 - [ ] End-to-end test run
-- [ ] Deployment runbook and handoff notes
+- [x] Deployment runbook and handoff notes
 
 ---
 
@@ -43,7 +44,7 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 
 ### 4.1 Foundations
 
-- [ ] Confirm environment and stack versions
+- [x] Confirm environment and stack versions
 - [x] Establish project structure and repo conventions
 - [x] Define configuration and secrets strategy
 
@@ -56,10 +57,10 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 
 ### 4.3 Ingestion
 
-- [ ] Implement streaming ingestion per format
+- [x] Implement streaming ingestion per format
 - [x] Implement extraction, normalization, validation
 - [x] Integrate global deduplication (Postgres-backed store with fallback)
-- [x] Persist cleaned dataset and summary report (local storage prototype; S3 pending)
+- [x] Persist cleaned dataset and summary report (S3 or local fallback)
 
 ### 4.4 Queue and Scheduler
 
@@ -69,27 +70,27 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 
 ### 4.5 Sending
 
-- [ ] Implement SMTP account hierarchy models and lifecycle management
-- [ ] Implement rate limits, per-window usage tracking, and rotation strategy
-- [ ] Implement sending engine and retries
+- [x] Implement SMTP account hierarchy models and lifecycle management
+- [x] Implement rate limits, per-window usage tracking, and rotation strategy
+- [x] Implement sending engine and retries
 
 ### 4.6 Discord Control Plane
 
-- [ ] Implement primary Discord commands for ingestion, queue visibility, SMTP/account monitoring, sending controls, logs, and campaign management
+- [x] Implement primary Discord commands for ingestion, queue visibility, SMTP/account monitoring, sending controls, logs, and campaign management
 - [ ] Implement permission checks and response formatting
-- [ ] Ensure API coverage for all Discord operations
+- [x] Ensure API coverage for all Discord operations
 
 ### 4.7 Logging and Monitoring
 
-- [ ] Structured logs for ingestion and sending
-- [ ] Reporting outputs (summary + artifacts)
+- [x] Structured logs for ingestion and sending
+- [x] Reporting outputs (summary + artifacts)
 
 ### 4.8 QA and Release
 
 - [ ] Run end-to-end test with sample datasets
 - [ ] Validate sending window behavior
 - [ ] Verify Discord command flows
-- [ ] Produce deployment runbook
+- [x] Produce deployment runbook
 
 ---
 
@@ -115,6 +116,7 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
  - 2026-06-05: SMTP enable/disable endpoints and failures reporting added; account auto-disable on repeated failures implemented; minimal Discord bot command handlers added.
  - 2026-06-05: Slash-command registration script and interaction-based Discord bot handlers added; campaign create/send endpoints implemented (batch enqueue).
  - 2026-06-05: Metrics endpoint added; CI workflow added to run SMTP integration test; README and deployment runbook added for handoff.
+- 2026-06-06: Discord bot command surface expanded to cover ingest, queue, status, logs, pause/resume, SMTP status, account status, campaign create/list/send; build verified clean.
 
 
 ---

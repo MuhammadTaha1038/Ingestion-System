@@ -116,7 +116,7 @@ The API layer exposes all core operations and is the only backend interface used
 ## 8. Sending Workflow
 
 - Ingestion -> Queue -> Automated Sending
-- No manual send trigger in Phase 1.
+- Manual campaign send trigger is available in Phase 1 via `/campaign-send` and `POST /campaigns/:id/send`.
 
 ### Sending Window (Configurable)
 
@@ -189,19 +189,27 @@ These endpoints are intended to be used by the Discord control plane and adminis
 
 Discord is the primary operational interface for all core operations.
 
-### Phase 1 Commands (Required)
+### Phase 1 Commands (Implemented)
 
-- /ingest <file_url_or_path>
+- /ingest
 - /status
 - /queue
-- /smtp-status
-- /accounts-status
-- /campaign-create
-- /campaign-update
-- /campaign-list
+- /logs
 - /pause
 - /resume
-- /logs
+- /smtp-status
+- /accounts-status
+- /smtp-list
+- /smtp-disable
+- /smtp-enable
+- /job-status
+- /campaign-create
+- /campaign-list
+- /campaign-send
+
+### Phase 1 Commands (Not yet implemented)
+
+- /campaign-update
 
 ### Client clarifications (2026-06-04)
 
@@ -239,16 +247,17 @@ The backend exposes APIs consumed by the Discord bot:
 - POST /smtp/account/:id/disable
 - POST /smtp/account/:id/enable
 - GET /smtp/failures
+- POST /campaigns
+- PUT /campaigns/:id
+- GET /campaigns
+- POST /campaigns/:id/send
+- POST /control/pause
+- POST /control/resume
+- GET /logs
 
 ### Security: SMTP credentials
 
 SMTP account passwords are stored encrypted using AES-256-GCM. Set `ENCRYPTION_KEY` (at least 32 characters) in the environment before creating SMTP accounts. The backend encrypts passwords at creation and decrypts them only at send time.
-- POST /campaigns
-- PUT /campaigns/:id
-- GET /campaigns
-- POST /control/pause
-- POST /control/resume
-- GET /logs
 
 ---
 

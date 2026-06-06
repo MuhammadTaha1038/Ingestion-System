@@ -18,10 +18,34 @@ export const registerCommands = async (): Promise<void> => {
   const rest = new REST({ version: "10" }).setToken(token);
 
   const commands = [
+    { name: "ingest", description: "Trigger ingestion", options: [
+      { name: "format", type: 3, description: "csv, json, txt, raw, bulk", required: true },
+      { name: "content", type: 3, description: "dataset content", required: true },
+      { name: "source_path", type: 3, description: "optional source path", required: false },
+      { name: "campaign_id", type: 3, description: "optional campaign id", required: false }
+    ] },
+    { name: "status", description: "Get job summary or job status", options: [
+      { name: "job_id", type: 3, description: "optional job id", required: false }
+    ] },
+    { name: "queue", description: "Show queue status" },
+    { name: "logs", description: "Show recent logs", options: [
+      { name: "limit", type: 4, description: "number of log lines", required: false }
+    ] },
+    { name: "pause", description: "Pause ingestion and sending queues" },
+    { name: "resume", description: "Resume ingestion and sending queues" },
+    { name: "smtp-status", description: "Show active SMTP accounts" },
+    { name: "accounts-status", description: "Show account status" },
     { name: "smtp-list", description: "List SMTP accounts" },
     { name: "smtp-disable", description: "Disable SMTP account", options: [{ name: "id", type: 3, description: "account id", required: true }] },
     { name: "smtp-enable", description: "Enable SMTP account", options: [{ name: "id", type: 3, description: "account id", required: true }] },
     { name: "job-status", description: "Get job status", options: [{ name: "id", type: 3, description: "job id", required: true }] },
+    { name: "campaign-list", description: "List campaigns" },
+    { name: "campaign-create", description: "Create campaign", options: [
+      { name: "name", type: 3, description: "campaign name", required: true },
+      { name: "subject", type: 3, description: "email subject", required: true },
+      { name: "body_html", type: 3, description: "HTML body", required: true },
+      { name: "from_address", type: 3, description: "from address", required: true }
+    ] },
     { name: "campaign-send", description: "Trigger campaign sending", options: [{ name: "id", type: 3, description: "campaign id", required: true }] }
   ];
 

@@ -58,4 +58,4 @@ Required environment variables for full smoke test:
 
 - Keep SMTP credentials in `.env`, not in git.
 - For Gmail testing, use an app password rather than a normal account password.
-- Phase 1 scope is complete for the MVP delivery path; Phase 2 items remain deferred.
+- Phase 1 implementation is largely complete; final validation against the client environment remains before handoff.
