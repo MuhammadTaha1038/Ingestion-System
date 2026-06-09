@@ -9,6 +9,19 @@ export interface S3Config {
   secretAccessKey: string;
 }
 
+const normalizeEndpoint = (endpoint: string): string => {
+  const trimmed = endpoint.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `https://${trimmed}`;
+};
+
 export const hasS3Config = (config: S3Config): boolean =>
   Boolean(
     config.endpoint &&
@@ -20,7 +33,7 @@ export const hasS3Config = (config: S3Config): boolean =>
 export const createS3Client = (config: S3Config): S3Client =>
   new S3Client({
     region: config.region || "us-east-1",
-    endpoint: config.endpoint,
+    endpoint: normalizeEndpoint(config.endpoint),
     credentials: {
       accessKeyId: config.accessKeyId,
       secretAccessKey: config.secretAccessKey
