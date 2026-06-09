@@ -8,7 +8,8 @@ const MAX_INVALID_SAMPLES = 25;
 
 export const runIngestion = async (
   input: IngestionInput,
-  dedupStore: DedupStore
+  dedupStore: DedupStore,
+  options?: { datasetId?: string | null }
 ): Promise<IngestionResult> => {
   const parsed = parseInputContent(input.format, input.content);
   const records: IngestionRecord[] = [];
@@ -36,7 +37,7 @@ export const runIngestion = async (
       continue;
     }
 
-    const isNew = await dedupStore.checkAndInsert(normalized);
+    const isNew = await dedupStore.checkAndInsert(normalized, options?.datasetId ?? null);
     if (!isNew) {
       duplicateCount += 1;
       continue;

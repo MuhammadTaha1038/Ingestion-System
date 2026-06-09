@@ -195,7 +195,8 @@ export const startIngestionWorker = (): void => {
           content,
           sourcePath: job.data.input.sourcePath
         },
-        dedupStore
+        dedupStore,
+        { datasetId }
       );
 
       const processedPath = await writeProcessedDataset(jobId, result);

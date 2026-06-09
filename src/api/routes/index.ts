@@ -614,6 +614,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
+    const body = request.body as Record<string, unknown> | undefined;
+    const datasetId = typeof body?.datasetId === "string" ? body.datasetId : undefined;
+
     try {
       const pool = await (await import("../../db/pool.js")).getDatabasePool();
       const campaignRes = await pool.query(`SELECT subject, body_html, body_text FROM campaigns WHERE id = $1`, [id]);
@@ -624,7 +627,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
       const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
       // fetch recipients for a campaign by joining recipients/sending_tasks
-      const res = await pool.query(`SELECT r.email_normalized FROM recipients r`);
+      const res = datasetId
+        ? await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId])
+        : await pool.query(`SELECT r.email_normalized FROM recipients r`);
       const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
 
       const { sendingQueue } = await import("../../queue/queues.js");

@@ -536,6 +536,7 @@ export const startDiscordBot = async (): Promise<void> => {
 
       if (commandName === "campaign-send") {
         const id = options.getString("id", true);
+        const datasetId = options.getString("dataset_id") ?? undefined;
         if (!config.databaseUrl) {
           await commandInteraction.editReply("db_required");
           return;
@@ -549,7 +550,9 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
-        const res = await pool.query(`SELECT r.email_normalized FROM recipients r`);
+        const res = datasetId
+          ? await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId])
+          : await pool.query(`SELECT r.email_normalized FROM recipients r`);
         const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
         const batchSize = 50;
 
@@ -563,7 +566,7 @@ export const startDiscordBot = async (): Promise<void> => {
           await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
         }
 
-        await commandInteraction.editReply(`triggered campaign ${id}, queued ${Math.ceil(emails.length / batchSize)} send jobs`);
+        await commandInteraction.editReply(`triggered campaign ${id}, queued ${Math.ceil(emails.length / batchSize)} send jobs${datasetId ? ` for dataset ${datasetId}` : ""}`);
         return;
       }
     } catch (err) {

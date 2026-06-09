@@ -100,7 +100,10 @@ export const registerCommands = async (): Promise<void> => {
       { name: "reply_to", type: 3, description: "reply-to address", required: false },
       { name: "status", type: 3, description: "draft, active, paused, archived", required: false }
     ] },
-    { name: "campaign-send", description: "Trigger campaign sending", options: [{ name: "id", type: 3, description: "campaign id", required: true }] }
+    { name: "campaign-send", description: "Trigger campaign sending", options: [
+      { name: "id", type: 3, description: "campaign id", required: true },
+      { name: "dataset_id", type: 3, description: "optional dataset id to target", required: false }
+    ] }
   ];
 
   try {
