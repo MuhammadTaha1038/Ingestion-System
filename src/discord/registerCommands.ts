@@ -36,9 +36,46 @@ export const registerCommands = async (): Promise<void> => {
     ] },
     { name: "pause", description: "Pause ingestion and sending queues" },
     { name: "resume", description: "Resume ingestion and sending queues" },
+    { name: "cpanel-create", description: "Create cPanel account", options: [
+      { name: "name", type: 3, description: "cPanel account name", required: true }
+    ] },
+    { name: "cpanel-list", description: "List cPanel accounts" },
+    { name: "subdomain-create", description: "Create subdomain", options: [
+      { name: "cpanel_id", type: 3, description: "cPanel account id", required: true },
+      { name: "name", type: 3, description: "subdomain name", required: true }
+    ] },
+    { name: "subdomain-list", description: "List subdomains", options: [
+      { name: "cpanel_id", type: 3, description: "optional cPanel account id", required: false }
+    ] },
+    { name: "email-create", description: "Create email account", options: [
+      { name: "subdomain_id", type: 3, description: "subdomain id", required: true },
+      { name: "address", type: 3, description: "email address", required: true }
+    ] },
+    { name: "email-list", description: "List email accounts", options: [
+      { name: "subdomain_id", type: 3, description: "optional subdomain id", required: false }
+    ] },
     { name: "smtp-status", description: "Show active SMTP accounts" },
     { name: "accounts-status", description: "Show account status" },
-    { name: "smtp-list", description: "List SMTP accounts" },
+    { name: "smtp-create", description: "Create SMTP account", options: [
+      { name: "email_account_id", type: 3, description: "email account id", required: true },
+      { name: "host", type: 3, description: "SMTP host", required: true },
+      { name: "port", type: 4, description: "SMTP port", required: false },
+      { name: "username", type: 3, description: "SMTP username", required: true },
+      { name: "password", type: 3, description: "SMTP password or app password", required: true },
+      { name: "use_tls", type: 5, description: "use TLS", required: false },
+      { name: "max_per_window", type: 4, description: "max emails per window", required: false },
+      { name: "max_concurrent", type: 4, description: "max concurrent sends", required: false }
+    ] },
+    { name: "smtp-update", description: "Update SMTP account", options: [
+      { name: "id", type: 3, description: "SMTP account id", required: true },
+      { name: "host", type: 3, description: "SMTP host", required: false },
+      { name: "port", type: 4, description: "SMTP port", required: false },
+      { name: "username", type: 3, description: "SMTP username", required: false },
+      { name: "password", type: 3, description: "SMTP password or app password", required: false },
+      { name: "use_tls", type: 5, description: "use TLS", required: false },
+      { name: "max_per_window", type: 4, description: "max emails per window", required: false },
+      { name: "max_concurrent", type: 4, description: "max concurrent sends", required: false }
+    ] },
     { name: "smtp-usage", description: "Show SMTP usage windows or usage by window", options: [
       { name: "window_id", type: 3, description: "optional sending window id", required: false }
     ] },

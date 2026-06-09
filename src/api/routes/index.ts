@@ -297,7 +297,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const port = Number(body?.port ?? 587);
     const username = body?.username as string | undefined;
     const password = body?.password as string | undefined;
+    const useTls = typeof body?.useTls === "boolean" ? body.useTls : true;
     const maxPerWindow = Number(body?.maxPerWindow ?? 50);
+    const maxConcurrent = Number(body?.maxConcurrent ?? 1);
 
     if (!emailAccountId || !host || !username || !password) {
       reply.code(400).send({ error: "invalid_body" });
@@ -314,7 +316,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
         port,
         username,
         passwordEncrypted: encrypted,
-        maxPerWindow
+        useTls,
+        maxPerWindow,
+        maxConcurrent
       });
 
       reply.code(201).send(ok({ id }));
@@ -386,6 +390,8 @@ export const registerRoutes = (server: FastifyInstance): void => {
       if (typeof body.port === "number" || typeof body.port === "string") update.port = Number(body.port);
       if (typeof body.username === "string") update.username = body.username;
       if (typeof body.maxPerWindow === "number" || typeof body.maxPerWindow === "string") update.maxPerWindow = Number(body.maxPerWindow);
+      if (typeof body.maxConcurrent === "number" || typeof body.maxConcurrent === "string") update.maxConcurrent = Number(body.maxConcurrent);
+      if (typeof body.useTls === "boolean") update.useTls = body.useTls;
       if (typeof body.password === "string") {
         const { encrypt } = await import("../../security/crypto.js");
         update.passwordEncrypted = encrypt(body.password);

@@ -98,20 +98,59 @@ export class SmtpRepository {
     return res.rows[0].id as string;
   }
 
-  async updateSmtpAccount(id: string, patch: Partial<Record<string, unknown>>): Promise<void> {
+  async updateSmtpAccount(id: string, patch: {
+    host?: string;
+    port?: number;
+    username?: string;
+    passwordEncrypted?: string;
+    useTls?: boolean;
+    maxPerWindow?: number;
+    maxConcurrent?: number;
+  }): Promise<void> {
     const fields: string[] = [];
-    const values: any[] = [];
-    let idx = 1;
-    for (const [k, v] of Object.entries(patch)) {
-      fields.push(`${k} = $${idx}`);
-      values.push(v);
-      idx += 1;
+    const values: unknown[] = [];
+
+    if (typeof patch.host === "string") {
+      fields.push(`host = $${fields.length + 1}`);
+      values.push(patch.host);
     }
 
-    if (fields.length === 0) return;
+    if (typeof patch.port === "number") {
+      fields.push(`port = $${fields.length + 1}`);
+      values.push(patch.port);
+    }
+
+    if (typeof patch.username === "string") {
+      fields.push(`username = $${fields.length + 1}`);
+      values.push(patch.username);
+    }
+
+    if (typeof patch.passwordEncrypted === "string") {
+      fields.push(`password_encrypted = $${fields.length + 1}`);
+      values.push(patch.passwordEncrypted);
+    }
+
+    if (typeof patch.useTls === "boolean") {
+      fields.push(`use_tls = $${fields.length + 1}`);
+      values.push(patch.useTls);
+    }
+
+    if (typeof patch.maxPerWindow === "number") {
+      fields.push(`max_per_window = $${fields.length + 1}`);
+      values.push(patch.maxPerWindow);
+    }
+
+    if (typeof patch.maxConcurrent === "number") {
+      fields.push(`max_concurrent = $${fields.length + 1}`);
+      values.push(patch.maxConcurrent);
+    }
+
+    if (fields.length === 0) {
+      return;
+    }
 
     values.push(id);
-    await this.pool.query(`UPDATE smtp_accounts SET ${fields.join(", ")} WHERE id = $${idx}`, values);
+    await this.pool.query(`UPDATE smtp_accounts SET ${fields.join(", ")} WHERE id = $${fields.length + 1}`, values);
   }
 
   async disableSmtpAccount(id: string): Promise<void> {

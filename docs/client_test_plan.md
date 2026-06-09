@@ -84,15 +84,18 @@ Optional (for SMTP tests):
 
 ## 11) SMTP Account Setup
 
-- Create hierarchy:
-  - POST /accounts/cpanel
-  - POST /accounts/subdomain
-  - POST /accounts/email
-- Create SMTP account:
-  - POST /smtp/account with host/port/username/password
-- Validate:
-  - GET /smtp/accounts
-  - GET /smtp/status
+- Use Discord to create the sending hierarchy and SMTP account:
+  - /cpanel-create
+  - /cpanel-list
+  - /subdomain-create
+  - /subdomain-list
+  - /email-create
+  - /email-list
+  - /smtp-create
+  - /smtp-update
+  - /smtp-list
+  - /smtp-status
+- Validate that the SMTP account appears active and linked to the email account
 
 ## 12) Sending Test
 

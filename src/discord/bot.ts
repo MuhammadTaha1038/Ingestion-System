@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction, Client, GatewayIntentBits, Partials } from "discord.js";
 import { loadConfig } from "../config/config.js";
 import { createLogger } from "../logging/logger.js";
+import { encrypt } from "../security/crypto.js";
 import { SmtpRepository } from "../db/repositories/smtp.js";
 import { JobRepository } from "../db/repositories/jobs.js";
 import { DatasetRepository } from "../db/repositories/datasets.js";
+import { HierarchyRepository } from "../db/repositories/hierarchy.js";
 import { jobStore } from "../jobs/store.js";
 import { ingestionQueue, sendingQueue } from "../queue/queues.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
@@ -22,6 +24,26 @@ const truncate = (value: string, max = 1800): string =>
 const formatCampaignRows = (rows: Array<{ id: string; name: string; subject: string; status: string }>): string => {
   if (rows.length === 0) return "no_campaigns";
   return rows.slice(0, 10).map((row) => `${row.id} ${row.name} [${row.status}] ${row.subject}`).join("\n");
+};
+
+const formatCpanelRows = (rows: Array<{ id: string; name: string }>): string => {
+  if (rows.length === 0) return "no_cpanels";
+  return rows.slice(0, 10).map((row) => `${row.id} ${row.name}`).join("\n");
+};
+
+const formatSubdomainRows = (rows: Array<{ id: string; cpanel_account_id: string; name: string }>): string => {
+  if (rows.length === 0) return "no_subdomains";
+  return rows.slice(0, 10).map((row) => `${row.id} ${row.cpanel_account_id} ${row.name}`).join("\n");
+};
+
+const formatEmailRows = (rows: Array<{ id: string; subdomain_id: string; address: string }>): string => {
+  if (rows.length === 0) return "no_email_accounts";
+  return rows.slice(0, 10).map((row) => `${row.id} ${row.subdomain_id} ${row.address}`).join("\n");
+};
+
+const formatSmtpRows = (rows: Array<{ id: string; email_account_id: string; host: string; port: number; username: string; status: string; use_tls: boolean; max_per_window: number; max_concurrent: number }>): string => {
+  if (rows.length === 0) return "no_accounts";
+  return rows.slice(0, 10).map((row) => `${row.id} ${row.username}@${row.host}:${row.port} [${row.status}] tls=${row.use_tls} window=${row.max_per_window} concurrent=${row.max_concurrent}`).join("\n");
 };
 
 export const startDiscordBot = async (): Promise<void> => {
@@ -176,6 +198,85 @@ export const startDiscordBot = async (): Promise<void> => {
         return;
       }
 
+      if (commandName === "cpanel-create") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const name = options.getString("name", true);
+        const repo = new HierarchyRepository();
+        const id = await repo.createCpanel(name);
+        await commandInteraction.editReply(`created cpanel ${id}`);
+        return;
+      }
+
+      if (commandName === "cpanel-list") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const repo = new HierarchyRepository();
+        const list = await repo.listCpanels();
+        await commandInteraction.editReply(truncate(formatCpanelRows(list)));
+        return;
+      }
+
+      if (commandName === "subdomain-create") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const cpanelId = options.getString("cpanel_id", true);
+        const name = options.getString("name", true);
+        const repo = new HierarchyRepository();
+        const id = await repo.createSubdomain(cpanelId, name);
+        await commandInteraction.editReply(`created subdomain ${id}`);
+        return;
+      }
+
+      if (commandName === "subdomain-list") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const cpanelId = options.getString("cpanel_id") ?? undefined;
+        const repo = new HierarchyRepository();
+        const list = await repo.listSubdomains(cpanelId);
+        await commandInteraction.editReply(truncate(formatSubdomainRows(list)));
+        return;
+      }
+
+      if (commandName === "email-create") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const subdomainId = options.getString("subdomain_id", true);
+        const address = options.getString("address", true);
+        const repo = new HierarchyRepository();
+        const id = await repo.createEmailAccount(subdomainId, address);
+        await commandInteraction.editReply(`created email account ${id}`);
+        return;
+      }
+
+      if (commandName === "email-list") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const subdomainId = options.getString("subdomain_id") ?? undefined;
+        const repo = new HierarchyRepository();
+        const list = await repo.listEmailAccounts(subdomainId);
+        await commandInteraction.editReply(truncate(formatEmailRows(list)));
+        return;
+      }
+
       if (commandName === "smtp-status" || commandName === "accounts-status") {
         if (!config.databaseUrl) {
           await commandInteraction.editReply("db_required");
@@ -188,11 +289,90 @@ export const startDiscordBot = async (): Promise<void> => {
         return;
       }
 
+      if (commandName === "smtp-create") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const emailAccountId = options.getString("email_account_id", true);
+        const host = options.getString("host", true);
+        const username = options.getString("username", true);
+        const password = options.getString("password", true);
+        const port = options.getInteger("port") ?? 587;
+        const useTls = options.getBoolean("use_tls") ?? true;
+        const maxPerWindow = options.getInteger("max_per_window") ?? 50;
+        const maxConcurrent = options.getInteger("max_concurrent") ?? 1;
+
+        const repo = new SmtpRepository();
+        const id = await repo.createSmtpAccount({
+          emailAccountId,
+          host,
+          port,
+          username,
+          passwordEncrypted: encrypt(password),
+          useTls,
+          maxPerWindow,
+          maxConcurrent
+        });
+
+        await commandInteraction.editReply(`created smtp account ${id}`);
+        return;
+      }
+
+      if (commandName === "smtp-update") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const id = options.getString("id", true);
+        const patch: {
+          host?: string;
+          port?: number;
+          username?: string;
+          passwordEncrypted?: string;
+          useTls?: boolean;
+          maxPerWindow?: number;
+          maxConcurrent?: number;
+        } = {};
+
+        const host = options.getString("host");
+        const username = options.getString("username");
+        const password = options.getString("password");
+        const port = options.getInteger("port");
+        const useTls = options.getBoolean("use_tls");
+        const maxPerWindow = options.getInteger("max_per_window");
+        const maxConcurrent = options.getInteger("max_concurrent");
+
+        if (host) patch.host = host;
+        if (typeof port === "number") patch.port = port;
+        if (username) patch.username = username;
+        if (password) patch.passwordEncrypted = encrypt(password);
+        if (typeof useTls === "boolean") patch.useTls = useTls;
+        if (typeof maxPerWindow === "number") patch.maxPerWindow = maxPerWindow;
+        if (typeof maxConcurrent === "number") patch.maxConcurrent = maxConcurrent;
+
+        if (Object.keys(patch).length === 0) {
+          await commandInteraction.editReply("no_fields_to_update");
+          return;
+        }
+
+        const repo = new SmtpRepository();
+        await repo.updateSmtpAccount(id, patch);
+        await commandInteraction.editReply(`updated smtp account ${id}`);
+        return;
+      }
+
       if (commandName === "smtp-list") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
         const repo = new SmtpRepository();
         const list = await repo.listAllAccounts();
-        const lines = list.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`);
-        await commandInteraction.editReply(lines.join("\n") || "no_accounts");
+        await commandInteraction.editReply(truncate(formatSmtpRows(list)));
         return;
       }
 
