@@ -74,57 +74,68 @@ export const startDiscordBot = async (): Promise<void> => {
         const sourcePath = sourcePathOption ?? attachment?.url;
         const campaignId = options.getString("campaign_id") ?? undefined;
 
-        if (!allowedFormats.has(format)) {
-          await commandInteraction.editReply("invalid_format");
-          return;
-        }
+        void (async () => {
+          try {
+            if (!allowedFormats.has(format)) {
+              await commandInteraction.editReply("invalid_format");
+              return;
+            }
 
-        if (!content.trim() && !sourcePath) {
-          await commandInteraction.editReply("missing_content_or_source_path");
-          return;
-        }
+            if (!content.trim() && !sourcePath) {
+              await commandInteraction.editReply("missing_content_or_source_path");
+              return;
+            }
 
-        const inputFormat = format as InputFormat;
+            const inputFormat = format as InputFormat;
 
-        let datasetId: string | null = null;
-        if (config.databaseUrl) {
-          const datasetRepo = new DatasetRepository();
-          datasetId = await datasetRepo.createDataset({
-            sourceType: inputFormat,
-            sourcePath: sourcePath ?? "inline"
-          });
-        }
+            let datasetId: string | null = null;
+            if (config.databaseUrl) {
+              const datasetRepo = new DatasetRepository();
+              datasetId = await datasetRepo.createDataset({
+                sourceType: inputFormat,
+                sourcePath: sourcePath ?? "inline"
+              });
+            }
 
-        const job = jobStore.createJob("ingestion", {
-          format,
-          sourcePath: sourcePath ?? null,
-          campaignId: campaignId ?? null,
-          datasetId
-        });
+            const job = jobStore.createJob("ingestion", {
+              format,
+              sourcePath: sourcePath ?? null,
+              campaignId: campaignId ?? null,
+              datasetId
+            });
 
-        if (config.databaseUrl) {
-          const jobRepo = new JobRepository();
-          await jobRepo.createJob({
-            id: job.id,
-            type: "ingestion",
-            status: "pending",
-            datasetId,
-            campaignId: campaignId ?? null
-          });
-        }
+            if (config.databaseUrl) {
+              const jobRepo = new JobRepository();
+              await jobRepo.createJob({
+                id: job.id,
+                type: "ingestion",
+                status: "pending",
+                datasetId,
+                campaignId: campaignId ?? null
+              });
+            }
 
-        await ingestionQueue.add(
-          "ingest",
-          {
-            jobId: job.id,
-            datasetId: datasetId ?? undefined,
-            input: { format: inputFormat, content, sourcePath },
-            campaignId: campaignId ?? undefined
-          },
-          { jobId: job.id }
-        );
+            await ingestionQueue.add(
+              "ingest",
+              {
+                jobId: job.id,
+                datasetId: datasetId ?? undefined,
+                input: { format: inputFormat, content, sourcePath },
+                campaignId: campaignId ?? undefined
+              },
+              { jobId: job.id }
+            );
 
-        await commandInteraction.editReply(truncate(`queued ingestion job ${job.id}${datasetId ? ` dataset=${datasetId}` : ""}`));
+            await commandInteraction.editReply(truncate(`queued ingestion job ${job.id}${datasetId ? ` dataset=${datasetId}` : ""}`));
+          } catch (err) {
+            logger.error("discord ingest command failed", { error: String(err) });
+            try {
+              await commandInteraction.editReply("command_error");
+            } catch {
+              // ignore
+            }
+          }
+        })();
         return;
       }
 
