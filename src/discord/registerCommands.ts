@@ -59,9 +59,9 @@ export const registerCommands = async (): Promise<void> => {
     { name: "smtp-create", description: "Create SMTP account", options: [
       { name: "email_account_id", type: 3, description: "email account id", required: true },
       { name: "host", type: 3, description: "SMTP host", required: true },
-      { name: "port", type: 4, description: "SMTP port", required: false },
       { name: "username", type: 3, description: "SMTP username", required: true },
       { name: "password", type: 3, description: "SMTP password or app password", required: true },
+      { name: "port", type: 4, description: "SMTP port", required: false },
       { name: "use_tls", type: 5, description: "use TLS", required: false },
       { name: "max_per_window", type: 4, description: "max emails per window", required: false },
       { name: "max_concurrent", type: 4, description: "max concurrent sends", required: false }
