@@ -46,6 +46,75 @@ const formatSmtpRows = (rows: Array<{ id: string; email_account_id: string; host
   return rows.slice(0, 10).map((row) => `${row.id} ${row.username}@${row.host}:${row.port} [${row.status}] tls=${row.use_tls} window=${row.max_per_window} concurrent=${row.max_concurrent}`).join("\n");
 };
 
+const formatCountBlock = (title: string, counts: Record<string, number>): string => {
+  const order = ["waiting", "active", "delayed", "completed", "failed", "paused"];
+  const lines = order
+    .filter((key) => typeof counts[key] === "number")
+    .map((key) => `- ${key}: ${counts[key]}`);
+  return [title, ...lines].join("\n");
+};
+
+const formatQueueSummary = (status: {
+  ingestion: Record<string, number>;
+  sending: Record<string, number>;
+  paused: { ingestion: boolean; sending: boolean };
+}): string => {
+  return [
+    "Queue summary",
+    formatCountBlock("Ingestion", status.ingestion),
+    formatCountBlock("Sending", status.sending),
+    `Paused: ingestion=${status.paused.ingestion ? "yes" : "no"}, sending=${status.paused.sending ? "yes" : "no"}`,
+    "",
+    "Note: `failed` is historical job failure count, not a live error.",
+    "If sending is failing, check `/smtp-failures` and `/job-status id:<job_id>`."
+  ].join("\n");
+};
+
+const formatLogs = (logs: Array<{ ts: string; level: string; message: string; meta?: Record<string, unknown> }>): string => {
+  if (logs.length === 0) return "No recent logs.";
+
+  const lines = logs.slice(-20).map((entry) => {
+    const time = new Date(entry.ts).toLocaleString("en-PK", { timeZone: "Asia/Karachi" });
+    const meta = entry.meta && Object.keys(entry.meta).length > 0 ? ` ${JSON.stringify(entry.meta)}` : "";
+    return `- ${time} [${entry.level}] ${entry.message}${meta}`;
+  });
+
+  return ["Recent logs", ...lines].join("\n");
+};
+
+const formatWindows = (windows: Array<{ id: string; window_start: string; window_end: string; status: string }>): string => {
+  if (windows.length === 0) return "No sending windows found.";
+
+  const lines = windows.slice(0, 10).map((window) => {
+    const start = new Date(window.window_start).toLocaleString("en-PK", { timeZone: "Asia/Karachi" });
+    const end = new Date(window.window_end).toLocaleString("en-PK", { timeZone: "Asia/Karachi" });
+    return `- ${start} -> ${end} [${window.status}]`;
+  });
+
+  return [
+    "Sending windows (Pakistan time)",
+    ...lines,
+    "",
+    "If the current time is outside the active window, sends are queued until the next window."
+  ].join("\n");
+};
+
+const formatSmtpFailures = (rows: Array<{ smtp_account_id: string; consecutive_failures: number; last_failure_at: string | null }>): string => {
+  if (rows.length === 0) return "No SMTP failures recorded.";
+  return [
+    "SMTP failures",
+    ...rows.slice(0, 10).map((row) => `- ${row.smtp_account_id}: failures=${row.consecutive_failures}, last_failure=${row.last_failure_at ?? "none"}`)
+  ].join("\n");
+};
+
+const formatSmtpUsage = (rows: Array<{ smtp_account_id: string; used_count: number }>): string => {
+  if (rows.length === 0) return "No SMTP usage for this window.";
+  return [
+    "SMTP usage for window",
+    ...rows.slice(0, 10).map((row) => `- ${row.smtp_account_id}: used ${row.used_count}`)
+  ].join("\n");
+};
+
 export const startDiscordBot = async (): Promise<void> => {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) {
@@ -153,17 +222,33 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          await commandInteraction.editReply(truncate(JSON.stringify(job, null, 2)));
+          await commandInteraction.editReply(truncate([
+            `Job ${job.id}`,
+            `Type: ${job.type}`,
+            `Status: ${job.status}`,
+            `Created: ${job.createdAt}`,
+            `Updated: ${job.updatedAt}`,
+            `Progress: ${job.progress.processed}/${job.progress.total} processed, ${job.progress.failed} failed`,
+            job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
+            job.payload?.campaignId ? `Campaign: ${String(job.payload.campaignId)}` : null,
+            job.error ? `Error: ${job.error}` : null
+          ].filter(Boolean).join("\n")));
           return;
         }
 
-        await commandInteraction.editReply(truncate(JSON.stringify(jobStore.getSummary(), null, 2)));
+        const summary = jobStore.getSummary();
+        await commandInteraction.editReply(truncate([
+          formatCountBlock("Job summary", summary.counts),
+          "",
+          "Recent jobs:",
+          ...summary.recent.slice(0, 10).map((job) => `- ${job.id} ${job.type} [${job.status}] processed=${job.progress.processed}/${job.progress.total} failed=${job.progress.failed}`)
+        ].join("\n")));
         return;
       }
 
       if (commandName === "queue") {
         const status = await getQueueStatus();
-        await commandInteraction.editReply(truncate(JSON.stringify(status, null, 2)));
+        await commandInteraction.editReply(truncate(formatQueueSummary(status)));
         return;
       }
 
@@ -193,7 +278,7 @@ export const startDiscordBot = async (): Promise<void> => {
 
       if (commandName === "logs") {
         const limit = options.getInteger("limit") ?? 100;
-        await commandInteraction.editReply(truncate(JSON.stringify({ logs: getRecentLogs(limit) }, null, 2)));
+        await commandInteraction.editReply(truncate(formatLogs(getRecentLogs(limit))));
         return;
       }
 
@@ -400,14 +485,14 @@ export const startDiscordBot = async (): Promise<void> => {
             `SELECT smtp_account_id, used_count FROM smtp_usage WHERE window_id = $1 ORDER BY used_count DESC`,
             [windowId]
           );
-          await commandInteraction.editReply(truncate(JSON.stringify({ usage: res.rows }, null, 2)));
+          await commandInteraction.editReply(truncate(formatSmtpUsage(res.rows as Array<{ smtp_account_id: string; used_count: number }>)));
           return;
         }
 
         const res = await pool.query(
           `SELECT id, window_start, window_end, status FROM sending_windows ORDER BY window_start DESC LIMIT 10`
         );
-        await commandInteraction.editReply(truncate(JSON.stringify({ windows: res.rows }, null, 2)));
+        await commandInteraction.editReply(truncate(formatWindows(res.rows as Array<{ id: string; window_start: string; window_end: string; status: string }>)));
         return;
       }
 
@@ -421,7 +506,7 @@ export const startDiscordBot = async (): Promise<void> => {
         const res = await pool.query(
           `SELECT smtp_account_id, consecutive_failures, last_failure_at FROM smtp_failures ORDER BY last_failure_at DESC LIMIT 20`
         );
-        await commandInteraction.editReply(truncate(JSON.stringify({ failures: res.rows }, null, 2)));
+        await commandInteraction.editReply(truncate(formatSmtpFailures(res.rows as Array<{ smtp_account_id: string; consecutive_failures: number; last_failure_at: string | null }>)));
         return;
       }
 
