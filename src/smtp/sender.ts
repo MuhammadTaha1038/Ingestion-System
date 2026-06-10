@@ -15,6 +15,11 @@ export const sendMail = async (smtpAccountId: string, to: string, subject: strin
     host: row.host,
     port: row.port,
     secure: row.use_tls,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
     auth: {
       user: row.username,
       pass: password

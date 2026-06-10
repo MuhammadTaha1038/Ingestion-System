@@ -20,10 +20,25 @@ export const startSendingWorker = (): void => {
 
     // Process recipients provided by the job. If none provided, use batchSize as a placeholder.
     const recipients = job.data.recipients ?? [];
-    const batchSize = job.data.batchSize ?? (recipients.length || 1);
+    const batchSize = job.data.batchSize ?? recipients.length;
 
     if (recipients.length === 0) {
-      logger.warn("no recipients provided in job; nothing to send");
+      logger.warn("no recipients provided in job; completing without SMTP send", { jobId: job.id });
+      if (jobRepo) {
+        await jobRepo.markCompleted(String(job.id), { total: 0, processed: 0, failed: 0 });
+      }
+
+      try {
+        const jobRecord = jobStore.getJob(job.data.campaignId ?? job.id);
+        if (jobRecord) {
+          jobStore.updateJob(jobRecord.id, { status: "completed" });
+        }
+      } catch (err) {
+        // ignore
+      }
+
+      logger.info("sending job finished", { jobId: job.id, sent: 0, failed: 0 });
+      return;
     }
 
     const smtpRepo = config.databaseUrl ? new (await import("../db/repositories/smtp.js")).SmtpRepository() : null;
@@ -38,6 +53,7 @@ export const startSendingWorker = (): void => {
         logger.warn("no available smtp account, requeueing work");
         throw new Error("no_smtp_available");
       }
+      logger.info("sending recipient", { jobId: job.id, to: recipient?.to, smtpAccount: selected.account.id, attemptLimit: maxAttempts });
       // retry loop per recipient
       let sent = false;
       let lastErr: unknown = null;
@@ -80,6 +96,10 @@ export const startSendingWorker = (): void => {
       }
     }
 
+    if (jobRepo) {
+      await jobRepo.markCompleted(String(job.id), { total: recipients.length, processed: recipients.length, failed: 0 });
+    }
+
     // Mark the job as completed in the in-memory job store if present
     try {
       const jobRecord = jobStore.getJob(job.data.campaignId ?? job.id);
@@ -90,6 +110,6 @@ export const startSendingWorker = (): void => {
       // ignore
     }
 
-    logger.info("sending job finished", { jobId: job.id });
+    logger.info("sending job finished", { jobId: job.id, sent: recipients.length, failed: 0 });
   });
 };
