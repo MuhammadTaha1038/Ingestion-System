@@ -10,13 +10,24 @@ export interface SendingWindowState {
   isActive: boolean;
 }
 
-export const getSendingWindowState = (now = new Date()): SendingWindowState => {
+export interface SendingWindowSettings {
+  sendingWindowHours: number;
+  sendingWindowIntervalHours: number;
+  sendingWindowStartHour: number;
+  sendingWindowStartMinute: number;
+  sendingWindowTz: string;
+}
+
+export const getSendingWindowState = (
+  now = new Date(),
+  settings?: SendingWindowSettings
+): SendingWindowState => {
   const config = loadConfig();
-  const zone = config.sendingWindowTz;
-  const durationHours = config.sendingWindowHours;
-  const intervalHours = config.sendingWindowIntervalHours;
-  const startHour = config.sendingWindowStartHour;
-  const startMinute = config.sendingWindowStartMinute;
+  const zone = settings?.sendingWindowTz ?? config.sendingWindowTz;
+  const durationHours = settings?.sendingWindowHours ?? config.sendingWindowHours;
+  const intervalHours = settings?.sendingWindowIntervalHours ?? config.sendingWindowIntervalHours;
+  const startHour = settings?.sendingWindowStartHour ?? config.sendingWindowStartHour;
+  const startMinute = settings?.sendingWindowStartMinute ?? config.sendingWindowStartMinute;
 
   const nowZoned = DateTime.fromJSDate(now, { zone });
   let anchor = nowZoned.startOf("day").plus({

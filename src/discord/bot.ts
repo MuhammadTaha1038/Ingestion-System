@@ -6,12 +6,14 @@ import { SmtpRepository } from "../db/repositories/smtp.js";
 import { JobRepository } from "../db/repositories/jobs.js";
 import { DatasetRepository } from "../db/repositories/datasets.js";
 import { HierarchyRepository } from "../db/repositories/hierarchy.js";
+import { WindowSettingsRepository } from "../db/repositories/windowSettings.js";
 import { jobStore } from "../jobs/store.js";
 import { ingestionQueue, sendingQueue } from "../queue/queues.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
 import { getRecentLogs } from "../logging/logger.js";
 import { getDatabasePool } from "../db/pool.js";
 import { InputFormat } from "../ingestion/types.js";
+import { getSendingWindowState } from "../scheduler/windowScheduler.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -112,6 +114,32 @@ const formatSmtpUsage = (rows: Array<{ smtp_account_id: string; used_count: numb
   return [
     "SMTP usage for window",
     ...rows.slice(0, 10).map((row) => `- ${row.smtp_account_id}: used ${row.used_count}`)
+  ].join("\n");
+};
+
+const formatWindowSettings = (settings: {
+  sending_window_hours: number;
+  sending_window_interval_hours: number;
+  sending_window_start_hour: number;
+  sending_window_start_minute: number;
+  sending_window_tz: string;
+}): string => {
+  const state = getSendingWindowState(new Date(), {
+    sendingWindowHours: settings.sending_window_hours,
+    sendingWindowIntervalHours: settings.sending_window_interval_hours,
+    sendingWindowStartHour: settings.sending_window_start_hour,
+    sendingWindowStartMinute: settings.sending_window_start_minute,
+    sendingWindowTz: settings.sending_window_tz
+  });
+
+  return [
+    "Sending window settings",
+    `Hours: ${settings.sending_window_hours}`,
+    `Interval hours: ${settings.sending_window_interval_hours}`,
+    `Start time: ${String(settings.sending_window_start_hour).padStart(2, "0")}:${String(settings.sending_window_start_minute).padStart(2, "0")}`,
+    `Timezone: ${settings.sending_window_tz}`,
+    `Current window: ${new Date(state.windowStart).toLocaleString("en-PK", { timeZone: settings.sending_window_tz })} -> ${new Date(state.windowEnd).toLocaleString("en-PK", { timeZone: settings.sending_window_tz })}`,
+    `Active now: ${state.isActive ? "yes" : "no"}`
   ].join("\n");
 };
 
@@ -222,6 +250,10 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
+          const resultCounts = job.payload?.result && typeof job.payload.result === "object"
+            ? (job.payload.result as { counts?: { raw?: number; valid?: number; duplicate?: number; error?: number } }).counts
+            : null;
+
           await commandInteraction.editReply(truncate([
             `Job ${job.id}`,
             `Type: ${job.type}`,
@@ -229,6 +261,7 @@ export const startDiscordBot = async (): Promise<void> => {
             `Created: ${job.createdAt}`,
             `Updated: ${job.updatedAt}`,
             `Progress: ${job.progress.processed}/${job.progress.total} processed, ${job.progress.failed} failed`,
+            resultCounts ? `Counts: raw=${resultCounts.raw ?? 0}, valid=${resultCounts.valid ?? 0}, duplicate=${resultCounts.duplicate ?? 0}, error=${resultCounts.error ?? 0}` : null,
             job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
             job.payload?.campaignId ? `Campaign: ${String(job.payload.campaignId)}` : null,
             job.error ? `Error: ${job.error}` : null
@@ -291,6 +324,67 @@ export const startDiscordBot = async (): Promise<void> => {
       if (commandName === "resume") {
         await resumeQueues();
         await commandInteraction.editReply("queues_running");
+        return;
+      }
+
+      if (commandName === "window-show") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const repo = new WindowSettingsRepository();
+        const settings = await repo.getSettings();
+        await commandInteraction.editReply(truncate(formatWindowSettings(settings)));
+        return;
+      }
+
+      if (commandName === "window-update") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const hours = options.getInteger("hours");
+        const intervalHours = options.getInteger("interval_hours");
+        const startHour = options.getInteger("start_hour");
+        const startMinute = options.getInteger("start_minute");
+        const timezone = options.getString("timezone");
+
+        if (hours === null && intervalHours === null && startHour === null && startMinute === null && timezone === null) {
+          await commandInteraction.editReply("no_fields_to_update");
+          return;
+        }
+
+        if (typeof startHour === "number" && (startHour < 0 || startHour > 23)) {
+          await commandInteraction.editReply("start_hour_must_be_0_to_23");
+          return;
+        }
+
+        if (typeof startMinute === "number" && (startMinute < 0 || startMinute > 59)) {
+          await commandInteraction.editReply("start_minute_must_be_0_to_59");
+          return;
+        }
+
+        if (typeof timezone === "string") {
+          try {
+            new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date());
+          } catch {
+            await commandInteraction.editReply("invalid_timezone");
+            return;
+          }
+        }
+
+        const repo = new WindowSettingsRepository();
+        const settings = await repo.updateSettings({
+          sendingWindowHours: hours ?? undefined,
+          sendingWindowIntervalHours: intervalHours ?? undefined,
+          sendingWindowStartHour: startHour ?? undefined,
+          sendingWindowStartMinute: startMinute ?? undefined,
+          sendingWindowTz: timezone ?? undefined
+        });
+
+        await commandInteraction.editReply(truncate(formatWindowSettings(settings)));
         return;
       }
 

@@ -36,6 +36,14 @@ export const registerCommands = async (): Promise<void> => {
     ] },
     { name: "pause", description: "Pause ingestion and sending queues" },
     { name: "resume", description: "Resume ingestion and sending queues" },
+    { name: "window-show", description: "Show sending window settings" },
+    { name: "window-update", description: "Update sending window settings", options: [
+      { name: "hours", type: 4, description: "window duration in hours", required: false },
+      { name: "interval_hours", type: 4, description: "time between windows in hours", required: false },
+      { name: "start_hour", type: 4, description: "window start hour (0-23)", required: false },
+      { name: "start_minute", type: 4, description: "window start minute (0-59)", required: false },
+      { name: "timezone", type: 3, description: "timezone name, for example Asia/Karachi", required: false }
+    ] },
     { name: "cpanel-create", description: "Create cPanel account", options: [
       { name: "name", type: 3, description: "cPanel account name", required: true }
     ] },

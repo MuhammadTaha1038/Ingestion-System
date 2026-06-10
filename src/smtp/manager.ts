@@ -1,7 +1,9 @@
 import { SmtpRepository, SmtpAccountRecord } from "../db/repositories/smtp.js";
+import { WindowSettingsRepository } from "../db/repositories/windowSettings.js";
 import { getSendingWindowState } from "../scheduler/windowScheduler.js";
 
 const repo = new SmtpRepository();
+const settingsRepo = new WindowSettingsRepository();
 
 export interface SelectedAccount {
   account: SmtpAccountRecord;
@@ -10,7 +12,14 @@ export interface SelectedAccount {
 
 // Select an available SMTP account for the current sending window.
 export const selectAvailableAccount = async (): Promise<SelectedAccount | null> => {
-  const window = getSendingWindowState(new Date());
+  const settings = await settingsRepo.getSettings();
+  const window = getSendingWindowState(new Date(), {
+    sendingWindowHours: settings.sending_window_hours,
+    sendingWindowIntervalHours: settings.sending_window_interval_hours,
+    sendingWindowStartHour: settings.sending_window_start_hour,
+    sendingWindowStartMinute: settings.sending_window_start_minute,
+    sendingWindowTz: settings.sending_window_tz
+  });
   const windowKey = window.windowKey;
   const windowStart = window.windowStart;
   const windowEnd = window.windowEnd;
