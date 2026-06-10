@@ -117,6 +117,7 @@ The API layer exposes all core operations and is the only backend interface used
 
 - Ingestion -> Queue -> Automated Sending
 - Manual campaign send trigger is available in Phase 1 via `/campaign-send` and `POST /campaigns/:id/send`.
+- Campaign sends are dataset-scoped and require `dataset_id` / `datasetId`.
 
 ### Sending Window (Configurable)
 
@@ -177,6 +178,7 @@ These endpoints are intended to be used by the Discord control plane and adminis
 - Body (HTML + plain text fallback)
 - From address
 - Reply-to address
+- The send worker uses the campaign sender fields at delivery time.
 
 ### Phase 1 Defaults
 
@@ -209,7 +211,6 @@ Discord is the primary operational interface for all core operations.
 - /accounts-status
 - /smtp-create
 - /smtp-update
-- /smtp-list
 - /smtp-disable
 - /smtp-enable
 - /smtp-usage
@@ -259,7 +260,7 @@ The backend exposes APIs consumed by the Discord bot:
 - POST /campaigns
 - PUT /campaigns/:id
 - GET /campaigns
-- POST /campaigns/:id/send
+- POST /campaigns/:id/send (body: `{ datasetId }`)
 - POST /control/pause
 - POST /control/resume
 - GET /logs

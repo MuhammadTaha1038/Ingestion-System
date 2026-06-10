@@ -15,6 +15,7 @@ export interface IngestionJobPayload {
 export interface SendingJobPayload {
   campaignId: string;
   windowId: string;
-  batchSize?: number;
+  fromAddress?: string;
+  replyTo?: string;
   recipients?: Array<{ to: string; subject: string; html?: string; text?: string }>;
 }

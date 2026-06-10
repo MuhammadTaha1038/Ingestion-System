@@ -93,7 +93,6 @@ Optional (for SMTP tests):
   - /email-list
   - /smtp-create
   - /smtp-update
-  - /smtp-list
   - /smtp-status
 - Validate that the SMTP account appears active and linked to the email account
 
@@ -102,7 +101,7 @@ Optional (for SMTP tests):
 - Create campaign:
   - POST /campaigns
 - Trigger send:
-  - POST /campaigns/:id/send
+  - POST /campaigns/:id/send with `{ datasetId }`
 - Verify:
   - sending queue has jobs
   - logs show send attempts
@@ -121,7 +120,6 @@ Optional (for SMTP tests):
   - /resume
   - /smtp-status
   - /accounts-status
-  - /smtp-list
   - /smtp-usage
   - /smtp-failures
   - /smtp-disable
@@ -144,7 +142,7 @@ Discord ingest notes:
   - send retries happen
   - failures logged
   - account auto-disabled after threshold
-  - /smtp/failures shows entries
+  - /smtp-failures shows entries
 
 ## 15) Window Reset Test
 

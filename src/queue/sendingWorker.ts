@@ -21,9 +21,9 @@ export const startSendingWorker = (): void => {
 
       if (jobRepo) await jobRepo.markProcessing(String(job.id));
 
-      // Process recipients provided by the job. If none provided, use batchSize as a placeholder.
       const recipients = job.data.recipients ?? [];
-      const batchSize = job.data.batchSize ?? recipients.length;
+      const fromAddress = job.data.fromAddress;
+      const replyTo = job.data.replyTo;
 
       if (recipients.length === 0) {
         logger.warn("no recipients provided in job; completing without SMTP send", { jobId: job.id });
@@ -44,8 +44,7 @@ export const startSendingWorker = (): void => {
         return;
       }
 
-      for (let i = 0; i < batchSize; i += 1) {
-        const recipient = recipients[i];
+      for (const recipient of recipients) {
         let attempt = 0;
         const maxAttempts = 4; // 1 initial + 3 retries
         const baseDelay = 1000; // 1s
@@ -62,7 +61,15 @@ export const startSendingWorker = (): void => {
           try {
             attempt += 1;
             if (recipient) {
-              await sendMail(selected.account.id, recipient.to, recipient.subject, recipient.html ?? "", recipient.text);
+              await sendMail(
+                selected.account.id,
+                recipient.to,
+                recipient.subject,
+                recipient.html ?? "",
+                recipient.text,
+                fromAddress,
+                replyTo
+              );
             } else {
               await sendMail(selected.account.id, "recipient@example.com", "[Test]", "<p>Test</p>");
             }

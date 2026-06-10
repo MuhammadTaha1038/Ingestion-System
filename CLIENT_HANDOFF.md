@@ -11,6 +11,8 @@
 - SMTP sending worker with retries, per-window limits, and failure auto-disable.
 - Metrics and health endpoints for operational visibility.
 
+Campaign sends are dataset-scoped: the send command requires a dataset id so it targets the intended ingest result.
+
 ## How it is built
 
 - Runtime: Node.js 20+ + TypeScript.
@@ -53,6 +55,8 @@ Required environment variables for full smoke test:
 - `S3_BUCKET`
 - `S3_ACCESS_KEY_ID`
 - `S3_SECRET_ACCESS_KEY`
+
+Campaign creation accepts `from_address` and optional `reply_to`; those values are used when sending.
 
 ## Operational notes
 

@@ -485,6 +485,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const subject = body?.subject as string | undefined;
     const bodyHtml = body?.body_html as string | undefined;
     const fromAddress = body?.from_address as string | undefined;
+    const replyTo = body?.reply_to as string | undefined;
 
     if (!config.databaseUrl) {
       reply.send(notReady("db_required"));
@@ -498,8 +499,8 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
     try {
       const res = await (await import("../../db/pool.js")).getDatabasePool().query(
-        `INSERT INTO campaigns (name, subject, body_html, from_address) VALUES ($1,$2,$3,$4) RETURNING id`,
-        [name, subject, bodyHtml, fromAddress]
+        `INSERT INTO campaigns (name, subject, body_html, from_address, reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        [name, subject, bodyHtml, fromAddress, replyTo ?? null]
       );
       reply.code(201).send(ok({ id: res.rows[0].id }));
     } catch (err) {
@@ -625,14 +626,22 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
     try {
       const pool = await (await import("../../db/pool.js")).getDatabasePool();
-      const campaignRes = await pool.query(`SELECT subject, body_html, body_text FROM campaigns WHERE id = $1`, [id]);
+      const campaignRes = await pool.query(
+        `SELECT subject, body_html, body_text, from_address, reply_to FROM campaigns WHERE id = $1`,
+        [id]
+      );
       if (!campaignRes.rows[0]) {
         reply.code(404).send({ error: "not_found" });
         return;
       }
 
-      const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
-      // fetch recipients for a campaign by joining recipients/sending_tasks
+      const campaign = campaignRes.rows[0] as {
+        subject: string;
+        body_html: string;
+        body_text: string | null;
+        from_address: string;
+        reply_to: string | null;
+      };
       const res = await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId]);
       const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
 
@@ -656,7 +665,17 @@ export const registerRoutes = (server: FastifyInstance): void => {
           });
         }
 
-        await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { jobId: sendJobId, removeOnComplete: true });
+        await sendingQueue.add(
+          "send",
+          {
+            campaignId: id,
+            windowId: "",
+            fromAddress: campaign.from_address,
+            replyTo: campaign.reply_to ?? undefined,
+            recipients: batch
+          },
+          { jobId: sendJobId, removeOnComplete: true }
+        );
       }
 
       reply.send(ok({ queued: Math.ceil(emails.length / batchSize), datasetId }));

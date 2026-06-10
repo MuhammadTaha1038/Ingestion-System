@@ -675,11 +675,12 @@ export const startDiscordBot = async (): Promise<void> => {
         const subject = options.getString("subject", true);
         const bodyHtml = options.getString("body_html", true);
         const fromAddress = options.getString("from_address", true);
+        const replyTo = options.getString("reply_to") ?? null;
 
         const pool = getDatabasePool();
         const res = await pool.query(
-          `INSERT INTO campaigns (name, subject, body_html, from_address) VALUES ($1,$2,$3,$4) RETURNING id`,
-          [name, subject, bodyHtml, fromAddress]
+          `INSERT INTO campaigns (name, subject, body_html, from_address, reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+          [name, subject, bodyHtml, fromAddress, replyTo]
         );
 
         await commandInteraction.editReply(`created campaign ${res.rows[0].id}`);
@@ -758,13 +759,22 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const pool = getDatabasePool();
-        const campaignRes = await pool.query(`SELECT subject, body_html, body_text FROM campaigns WHERE id = $1`, [id]);
+        const campaignRes = await pool.query(
+          `SELECT subject, body_html, body_text, from_address, reply_to FROM campaigns WHERE id = $1`,
+          [id]
+        );
         if (!campaignRes.rows[0]) {
           await commandInteraction.editReply("campaign_not_found");
           return;
         }
 
-        const campaign = campaignRes.rows[0] as { subject: string; body_html: string; body_text: string | null };
+        const campaign = campaignRes.rows[0] as {
+          subject: string;
+          body_html: string;
+          body_text: string | null;
+          from_address: string;
+          reply_to: string | null;
+        };
         const res = await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId]);
         const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
         const batchSize = 50;
@@ -784,7 +794,17 @@ export const startDiscordBot = async (): Promise<void> => {
             status: "pending",
             campaignId: id
           });
-          await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { jobId: sendJobId, removeOnComplete: true });
+          await sendingQueue.add(
+            "send",
+            {
+              campaignId: id,
+              windowId: "",
+              fromAddress: campaign.from_address,
+              replyTo: campaign.reply_to ?? undefined,
+              recipients: batch
+            },
+            { jobId: sendJobId, removeOnComplete: true }
+          );
         }
 
         await commandInteraction.editReply(`triggered campaign ${id}, queued ${Math.ceil(emails.length / batchSize)} send jobs for dataset ${datasetId}`);

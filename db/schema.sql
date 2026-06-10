@@ -38,20 +38,6 @@ CREATE TABLE recipients (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE sending_tasks (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id uuid NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
-  recipient_id uuid NOT NULL REFERENCES recipients(id) ON DELETE CASCADE,
-  status text NOT NULL DEFAULT 'pending',
-  attempt_count integer NOT NULL DEFAULT 0,
-  last_error text,
-  last_attempt_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX sending_tasks_campaign_recipient_uq
-  ON sending_tasks (campaign_id, recipient_id);
-
 CREATE TABLE jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   type text NOT NULL,

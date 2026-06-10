@@ -7,6 +7,8 @@ export interface DirectSmtpConfig {
   username?: string;
   password?: string;
   ignoreTLS?: boolean;
+  fromAddress?: string;
+  replyTo?: string;
 }
 
 export const sendDirect = async (
@@ -25,7 +27,8 @@ export const sendDirect = async (
   });
 
   const info = await transporter.sendMail({
-    from: cfg.username ?? "no-reply@example.com",
+    from: cfg.fromAddress ?? cfg.username ?? "no-reply@example.com",
+    replyTo: cfg.replyTo ?? undefined,
     to,
     subject,
     text: text ?? "",

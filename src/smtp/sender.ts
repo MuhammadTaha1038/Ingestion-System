@@ -4,7 +4,15 @@ import { decrypt } from "../security/crypto.js";
 
 const repo = new SmtpRepository();
 
-export const sendMail = async (smtpAccountId: string, to: string, subject: string, html: string, text?: string) => {
+export const sendMail = async (
+  smtpAccountId: string,
+  to: string,
+  subject: string,
+  html: string,
+  text?: string,
+  fromAddress?: string,
+  replyTo?: string
+) => {
   const res = await repo.pool.query("SELECT host, port, username, password_encrypted, use_tls FROM smtp_accounts WHERE id = $1", [smtpAccountId]);
   const row = res.rows[0];
   if (!row) throw new Error("smtp_account_not_found");
@@ -27,7 +35,8 @@ export const sendMail = async (smtpAccountId: string, to: string, subject: strin
   });
 
   const info = await transporter.sendMail({
-    from: row.username,
+    from: fromAddress ?? row.username,
+    replyTo: replyTo ?? undefined,
     to,
     subject,
     text: text ?? "",
