@@ -1,4 +1,5 @@
 import { FastifyInstance } from "fastify";
+import { randomUUID } from "crypto";
 import { loadConfig } from "../../config/config.js";
 import { createLogger, getRecentLogs } from "../../logging/logger.js";
 import { DatasetRepository } from "../../db/repositories/datasets.js";
@@ -636,13 +637,23 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
       const batchSize = 50;
       for (let i = 0; i < emails.length; i += batchSize) {
+        const sendJobId = randomUUID();
         const batch = emails.slice(i, i + batchSize).map((email: string) => ({
           to: email,
           subject: campaign.subject,
           html: campaign.body_html,
           text: campaign.body_text ?? undefined
         }));
-        await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
+        if (jobRepo) {
+          await jobRepo.createJob({
+            id: sendJobId,
+            type: "sending",
+            status: "pending",
+            campaignId: id
+          });
+        }
+
+        await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { jobId: sendJobId, removeOnComplete: true });
       }
 
       reply.send(ok({ queued: Math.ceil(emails.length / batchSize) }));

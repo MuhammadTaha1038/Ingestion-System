@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { ChatInputCommandInteraction, Client, GatewayIntentBits, Partials } from "discord.js";
 import { loadConfig } from "../config/config.js";
 import { createLogger } from "../logging/logger.js";
@@ -764,15 +765,23 @@ export const startDiscordBot = async (): Promise<void> => {
           : await pool.query(`SELECT r.email_normalized FROM recipients r`);
         const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
         const batchSize = 50;
+        const jobRepo = new JobRepository();
 
         for (let i = 0; i < emails.length; i += batchSize) {
+          const sendJobId = randomUUID();
           const batch = emails.slice(i, i + batchSize).map((email: string) => ({
             to: email,
             subject: campaign.subject,
             html: campaign.body_html,
             text: campaign.body_text ?? undefined
           }));
-          await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { removeOnComplete: true });
+          await jobRepo.createJob({
+            id: sendJobId,
+            type: "sending",
+            status: "pending",
+            campaignId: id
+          });
+          await sendingQueue.add("send", { campaignId: id, windowId: "", recipients: batch }, { jobId: sendJobId, removeOnComplete: true });
         }
 
         await commandInteraction.editReply(`triggered campaign ${id}, queued ${Math.ceil(emails.length / batchSize)} send jobs${datasetId ? ` for dataset ${datasetId}` : ""}`);
