@@ -60,16 +60,18 @@ const formatQueueSummary = (status: {
   ingestion: Record<string, number>;
   sending: Record<string, number>;
   paused: { ingestion: boolean; sending: boolean };
+  latestFailedSendingJob?: { id: string; error: string | null; finishedAt: string | null } | null;
 }): string => {
   return [
     "Queue summary",
     formatCountBlock("Ingestion", status.ingestion),
     formatCountBlock("Sending", status.sending),
     `Paused: ingestion=${status.paused.ingestion ? "yes" : "no"}, sending=${status.paused.sending ? "yes" : "no"}`,
+    status.latestFailedSendingJob ? `Latest failed send: ${status.latestFailedSendingJob.id} error=${status.latestFailedSendingJob.error ?? "none"}` : null,
     "",
     "Note: `failed` is historical job failure count, not a live error.",
     "If sending is failing, check `/smtp-failures` and `/job-status id:<job_id>`."
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 };
 
 const formatLogs = (logs: Array<{ ts: string; level: string; message: string; meta?: Record<string, unknown> }>): string => {
@@ -281,6 +283,23 @@ export const startDiscordBot = async (): Promise<void> => {
 
       if (commandName === "queue") {
         const status = await getQueueStatus();
+        if (config.databaseUrl) {
+          const pool = getDatabasePool();
+          const failedRes = await pool.query(
+            `SELECT id, error, finished_at FROM jobs WHERE type = 'sending' AND status = 'failed' ORDER BY finished_at DESC NULLS LAST LIMIT 1`
+          );
+          const latestFailedSendingJob = failedRes.rows[0]
+            ? {
+                id: String(failedRes.rows[0].id),
+                error: failedRes.rows[0].error ? String(failedRes.rows[0].error) : null,
+                finishedAt: failedRes.rows[0].finished_at ? String(failedRes.rows[0].finished_at) : null
+              }
+            : null;
+
+          await commandInteraction.editReply(truncate(formatQueueSummary({ ...status, latestFailedSendingJob })));
+          return;
+        }
+
         await commandInteraction.editReply(truncate(formatQueueSummary(status)));
         return;
       }
