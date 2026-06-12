@@ -154,6 +154,7 @@ const createIngestModal = () => {
   const format = new TextInputBuilder()
     .setCustomId("format")
     .setLabel("Format (optional)")
+    .setPlaceholder("Leave blank to auto-detect")
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
 
@@ -261,7 +262,7 @@ const queueDashboardIngestion = async (args: {
   sourcePath?: string;
   campaignId?: string;
 }): Promise<string> => {
-  const format = (args.format ?? "auto").trim().toLowerCase();
+  const format = (args.format ?? "").trim().toLowerCase() || "auto";
 
   if (format !== "auto" && !allowedFormats.has(format)) {
     return "invalid_format";
