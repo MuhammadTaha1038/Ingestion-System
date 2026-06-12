@@ -18,6 +18,7 @@ export const registerCommands = async (): Promise<void> => {
   const rest = new REST({ version: "10" }).setToken(token);
 
   const commands = [
+    { name: "dashboard", description: "Open the Discord operations dashboard" },
     { name: "ingest", description: "Trigger ingestion", options: [
       { name: "format", type: 3, description: "csv, json, txt, raw, bulk", required: true },
       { name: "content", type: 3, description: "dataset content", required: false },
