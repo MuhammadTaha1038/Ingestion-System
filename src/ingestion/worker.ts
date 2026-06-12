@@ -10,6 +10,7 @@ import { createIngestionWorker } from "../queue/workers.js";
 import { IngestionJobPayload } from "../queue/types.js";
 import {
   createS3Client,
+  getObjectBytes,
   getObjectText,
   hasS3Config,
   putObjectText,
@@ -20,6 +21,7 @@ import { PostgresDedupStore } from "./postgresDedupStore.js";
 import { runIngestion } from "./pipeline.js";
 import { IngestionInput, IngestionResult } from "./types.js";
 import { jobStore } from "../jobs/store.js";
+import { resolveIngestionChunks } from "./autoDetect.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -48,18 +50,25 @@ const ensureStorageDirs = async (): Promise<void> => {
   await mkdir(REPORTS_DIR, { recursive: true });
 };
 
-const fetchContent = async (sourcePath: string): Promise<string> => {
+const fetchSourceBytes = async (sourcePath: string): Promise<{ buffer: Buffer; sourceName: string }> => {
   if (sourcePath.startsWith("http://") || sourcePath.startsWith("https://")) {
     const response = await fetch(sourcePath);
     if (!response.ok) {
       throw new Error(`fetch_failed:${response.status}`);
     }
-    return await response.text();
+
+    const arrayBuffer = await response.arrayBuffer();
+    const url = new URL(sourcePath);
+    const contentDisposition = response.headers.get("content-disposition") ?? "";
+    const filenameMatch = /filename\*?=(?:UTF-8''|\")?([^\";]+)/i.exec(contentDisposition);
+    const sourceName = filenameMatch?.[1]?.trim().replace(/^\"|\"$/g, "") || decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "downloaded-file");
+
+    return { buffer: Buffer.from(arrayBuffer), sourceName };
   }
 
   if (sourcePath.startsWith("file://")) {
     const filePath = fileURLToPath(sourcePath);
-    return await readFile(filePath, "utf-8");
+    return { buffer: await readFile(filePath), sourceName: filePath.split(/[\\/]/).pop() ?? "file" };
   }
 
   const looksLikeWindowsPath = /^[a-zA-Z]:[\\/]/.test(sourcePath);
@@ -69,22 +78,22 @@ const fetchContent = async (sourcePath: string): Promise<string> => {
     }
 
     const location = resolveS3Location(sourcePath, config.s3.bucket);
-    return await getObjectText(s3Client, location.bucket, location.key);
+    return { buffer: await getObjectBytes(s3Client, location.bucket, location.key), sourceName: location.key.split("/").pop() ?? location.key };
   }
 
   throw new Error("unsupported_source_path");
 };
 
-const resolveInputContent = async (input: IngestionInput): Promise<string> => {
+const resolveInputSource = async (input: IngestionInput): Promise<{ buffer: Buffer; sourceName: string }> => {
   if (input.content && input.content.trim().length > 0) {
-    return input.content;
+    return { buffer: Buffer.from(input.content, "utf-8"), sourceName: input.sourcePath ?? "inline" };
   }
 
   if (!input.sourcePath) {
     throw new Error("missing_content");
   }
 
-  return await fetchContent(input.sourcePath);
+  return await fetchSourceBytes(input.sourcePath);
 };
 
 const writeProcessedDataset = async (
@@ -188,30 +197,54 @@ export const startIngestionWorker = (): void => {
         await datasetRepo.markProcessing(datasetId);
       }
 
-      const content = await resolveInputContent(job.data.input);
-      const result = await runIngestion(
-        {
-          format: job.data.input.format,
-          content,
-          sourcePath: job.data.input.sourcePath
-        },
-        dedupStore,
-        { datasetId }
-      );
+      const source = await resolveInputSource(job.data.input);
+      const sourceName = source.sourceName;
+      const chunks = resolveIngestionChunks(source.buffer, sourceName);
+      if (chunks.length === 0) {
+        throw new Error("no_supported_files_found");
+      }
 
-      const processedPath = await writeProcessedDataset(jobId, result);
-      const reportPath = await writeReport(jobId, job.data.input, result, processedPath);
-      updateJobCompletion(jobId, result, processedPath, reportPath);
+      const aggregateResult: IngestionResult = {
+        records: [],
+        counts: { raw: 0, valid: 0, duplicate: 0, error: 0 },
+        invalidSamples: []
+      };
+
+      for (const chunk of chunks) {
+        const result = await runIngestion(
+          {
+            format: chunk.format,
+            content: chunk.content,
+            sourcePath: job.data.input.sourcePath ?? chunk.sourceName
+          },
+          dedupStore,
+          { datasetId }
+        );
+
+        aggregateResult.records.push(...result.records);
+        aggregateResult.counts.raw += result.counts.raw;
+        aggregateResult.counts.valid += result.counts.valid;
+        aggregateResult.counts.duplicate += result.counts.duplicate;
+        aggregateResult.counts.error += result.counts.error;
+        aggregateResult.invalidSamples.push(...result.invalidSamples);
+      }
+
+      aggregateResult.records.sort((left, right) => left.email.localeCompare(right.email));
+      aggregateResult.invalidSamples = aggregateResult.invalidSamples.slice(0, 25);
+
+      const processedPath = await writeProcessedDataset(jobId, aggregateResult);
+      const reportPath = await writeReport(jobId, job.data.input, aggregateResult, processedPath);
+      updateJobCompletion(jobId, aggregateResult, processedPath, reportPath);
 
       if (datasetRepo && datasetId) {
-        await datasetRepo.markCompleted(datasetId, result.counts, processedPath, reportPath);
+        await datasetRepo.markCompleted(datasetId, aggregateResult.counts, processedPath, reportPath);
       }
 
       if (jobRepo) {
         await jobRepo.markCompleted(jobId, {
-          total: result.counts.raw,
-          processed: result.counts.valid,
-          failed: result.counts.error
+          total: aggregateResult.counts.raw,
+          processed: aggregateResult.counts.valid,
+          failed: aggregateResult.counts.error
         });
       }
 

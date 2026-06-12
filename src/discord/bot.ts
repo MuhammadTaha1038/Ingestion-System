@@ -153,9 +153,9 @@ const createIngestModal = () => {
 
   const format = new TextInputBuilder()
     .setCustomId("format")
-    .setLabel("Format: csv, txt, json, raw, bulk")
+    .setLabel("Format (optional; leave blank for auto-detect)")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true);
+    .setRequired(false);
 
   return new ModalBuilder()
     .setCustomId(ingestModalId)
@@ -256,12 +256,14 @@ const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
 };
 
 const queueDashboardIngestion = async (args: {
-  format: string;
+  format?: string;
   content?: string;
   sourcePath?: string;
   campaignId?: string;
 }): Promise<string> => {
-  if (!allowedFormats.has(args.format)) {
+  const format = (args.format ?? "auto").trim().toLowerCase();
+
+  if (format !== "auto" && !allowedFormats.has(format)) {
     return "invalid_format";
   }
 
@@ -269,7 +271,7 @@ const queueDashboardIngestion = async (args: {
     return "missing_content_or_source_path";
   }
 
-  const inputFormat = args.format as InputFormat;
+  const inputFormat = format as InputFormat;
 
   let datasetId: string | null = null;
   if (config.databaseUrl) {
@@ -848,7 +850,7 @@ export const startDiscordBot = async (): Promise<void> => {
       }
 
       if (commandName === "ingest") {
-        const format = options.getString("format", true);
+        const format = options.getString("format") ?? "auto";
         const content = options.getString("content") ?? "";
         const sourcePathOption = options.getString("source_path") ?? undefined;
         const attachment = options.getAttachment("file");
@@ -857,7 +859,7 @@ export const startDiscordBot = async (): Promise<void> => {
 
         void (async () => {
           try {
-            if (!allowedFormats.has(format)) {
+            if (format !== "auto" && !allowedFormats.has(format)) {
               await commandInteraction.editReply("invalid_format");
               return;
             }

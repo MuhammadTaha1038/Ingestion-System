@@ -20,7 +20,7 @@ export const registerCommands = async (): Promise<void> => {
   const commands = [
     { name: "dashboard", description: "Open the Discord operations dashboard" },
     { name: "ingest", description: "Trigger ingestion", options: [
-      { name: "format", type: 3, description: "csv, json, txt, raw, bulk", required: true },
+      { name: "format", type: 3, description: "auto, csv, json, txt, raw, bulk", required: false },
       { name: "content", type: 3, description: "dataset content", required: false },
       { name: "source_path", type: 3, description: "optional source path", required: false },
       { name: "file", type: 11, description: "optional attachment URL source", required: false },

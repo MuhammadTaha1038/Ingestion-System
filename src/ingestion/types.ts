@@ -1,4 +1,4 @@
-export type InputFormat = "csv" | "json" | "txt" | "raw" | "bulk";
+export type InputFormat = "auto" | "csv" | "json" | "txt" | "raw" | "bulk";
 
 export interface IngestionInput {
   format: InputFormat;

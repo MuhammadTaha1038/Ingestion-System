@@ -50,6 +50,15 @@ const streamToString = async (stream: Readable): Promise<string> => {
   return Buffer.concat(chunks).toString("utf-8");
 };
 
+const streamToBuffer = async (stream: Readable): Promise<Buffer> => {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+};
+
 export const resolveS3Location = (
   path: string,
   defaultBucket: string
@@ -78,22 +87,36 @@ export const getObjectText = async (
   bucket: string,
   key: string
 ): Promise<string> => {
+  const buffer = await getObjectBytes(client, bucket, key);
+  return buffer.toString("utf-8");
+};
+
+export const getObjectBytes = async (
+  client: S3Client,
+  bucket: string,
+  key: string
+): Promise<Buffer> => {
   const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = response.Body;
 
   if (!body) {
-    return "";
+    return Buffer.alloc(0);
+  }
+
+  if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === "function") {
+    const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
+    return Buffer.from(bytes);
   }
 
   if (typeof (body as { transformToString?: () => Promise<string> }).transformToString === "function") {
-    return await (body as { transformToString: () => Promise<string> }).transformToString();
+    return Buffer.from(await (body as { transformToString: () => Promise<string> }).transformToString(), "utf-8");
   }
 
   if (body instanceof Readable) {
-    return await streamToString(body);
+    return await streamToBuffer(body);
   }
 
-  return String(body);
+  return Buffer.from(String(body), "utf-8");
 };
 
 export const putObjectText = async (
