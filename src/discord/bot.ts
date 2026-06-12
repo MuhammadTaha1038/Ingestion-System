@@ -153,7 +153,7 @@ const createIngestModal = () => {
 
   const format = new TextInputBuilder()
     .setCustomId("format")
-    .setLabel("Format (optional; leave blank for auto-detect)")
+    .setLabel("Format (optional)")
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
 
