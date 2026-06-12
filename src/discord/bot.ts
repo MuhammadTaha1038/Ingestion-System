@@ -6,6 +6,7 @@ import {
   ChatInputCommandInteraction,
   Client,
   GatewayIntentBits,
+  TextChannel,
   ModalBuilder,
   Partials,
   TextInputBuilder,
@@ -60,6 +61,57 @@ const campaignUpdateModalId = "dashboard:campaign-update-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
 const emailCreateModalId = "dashboard:email-create-modal";
+
+const getDashboardChannelId = (): string | undefined => {
+  return process.env.DISCORD_DASHBOARD_CHANNEL_ID ?? process.env.DISCORD_STATUS_CHANNEL_ID;
+};
+
+const postDashboardPanel = async (client: Client): Promise<void> => {
+  const dashboardChannelId = getDashboardChannelId();
+  const guildId = process.env.DISCORD_SERVER_ID;
+  if (!guildId) {
+    return;
+  }
+
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    let channel: TextChannel | null = null;
+
+    if (dashboardChannelId) {
+      const fetched = await client.channels.fetch(dashboardChannelId);
+      if (fetched && fetched.isTextBased() && "send" in fetched) {
+        channel = fetched as TextChannel;
+      }
+    }
+
+    if (!channel) {
+      const channels = await guild.channels.fetch();
+      const named = channels.find((candidate) => candidate?.isTextBased() && candidate.name === "system-status");
+      const fallback = channels.find((candidate) => candidate?.isTextBased() && candidate.name === "general");
+      const target = named ?? fallback;
+      if (target && target.isTextBased() && "send" in target) {
+        channel = target as TextChannel;
+      }
+    }
+
+    if (!channel) {
+      logger.warn("discord dashboard channel not found");
+      return;
+    }
+
+    await channel.send({
+      content: [
+        "Discord operations dashboard",
+        "Use these buttons for the primary operational interface.",
+        "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here."
+      ].join("\n"),
+      components: createDashboardComponents()
+    });
+    logger.info("discord dashboard panel posted", { channelId: channel.id });
+  } catch (error) {
+    logger.warn("failed to post discord dashboard panel", { error: String(error) });
+  }
+};
 
 const createDashboardComponents = () => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -512,6 +564,7 @@ export const startDiscordBot = async (): Promise<void> => {
 
   client.on("ready", () => {
     logger.info("discord bot ready", { user: client.user?.tag });
+    void postDashboardPanel(client);
   });
   client.on("interactionCreate", async (interaction) => {
     let commandInteraction: ChatInputCommandInteraction | null = null;
