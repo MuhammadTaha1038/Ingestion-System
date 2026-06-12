@@ -784,9 +784,10 @@ export const startDiscordBot = async (): Promise<void> => {
         await commandInteraction.editReply({
           content: [
             "Discord operations dashboard",
-            "Use the buttons below for the first operational slice.",
-            "Ingestion opens a modal; queue, status, accounts, window, campaigns, pause, and resume are exposed as live controls.",
-            "Sending still requires campaign_id and dataset_id."
+            "Use the buttons below for the live control panel.",
+            "Ingestion opens a modal; queue, status, accounts, window, campaigns, storage, cPanel, subdomains, emails, pause, and resume are exposed as live controls.",
+            "Sending still requires campaign_id and dataset_id.",
+            "If you came here from a plain status command, use this dashboard for the UI buttons."
           ].join("\n"),
           components: createDashboardComponents()
         });
@@ -1083,7 +1084,11 @@ export const startDiscordBot = async (): Promise<void> => {
 
         const repo = new SmtpRepository();
         const accounts = await repo.listActiveAccounts();
-        await commandInteraction.editReply(truncate(accounts.length === 0 ? "no_accounts" : accounts.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`).join("\n")));
+        await commandInteraction.editReply(truncate([
+          accounts.length === 0 ? "no_accounts" : accounts.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`).join("\n"),
+          "",
+          "For the button-based interface, run /dashboard."
+        ].join("\n")));
         return;
       }
 
