@@ -251,6 +251,18 @@ export const startIngestionWorker = (): void => {
 
       const autoSendResult = datasetId ? await autoSendDatasetIfPossible(datasetId) : null;
       if (autoSendResult) {
+        const existingJob = jobStore.getJob(jobId);
+        jobStore.updateJob(jobId, {
+          payload: {
+            ...existingJob?.payload,
+            autoSend: {
+              queued: true,
+              campaignId: autoSendResult.campaignId,
+              recipients: autoSendResult.recipients,
+              queuedJobs: autoSendResult.queued
+            }
+          }
+        });
         logger.info("automatic campaign send queued", {
           jobId,
           datasetId,
@@ -259,6 +271,16 @@ export const startIngestionWorker = (): void => {
           queued: autoSendResult.queued
         });
       } else {
+        const existingJob = jobStore.getJob(jobId);
+        jobStore.updateJob(jobId, {
+          payload: {
+            ...existingJob?.payload,
+            autoSend: {
+              queued: false,
+              reason: "no_active_campaign"
+            }
+          }
+        });
         logger.info("ingestion completed without auto send target", { jobId, datasetId });
       }
 

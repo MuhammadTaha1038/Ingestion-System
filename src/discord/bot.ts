@@ -366,7 +366,8 @@ const queueDashboardIngestion = async (args: {
   return [
     "File accepted.",
     "Processing has started.",
-    "When ingestion completes, the active campaign will be sent automatically if one is available.",
+    "When ingestion completes, Status will show fetched, added, duplicate, and error counts for this file.",
+    "If an active campaign exists, auto-send will be queued automatically.",
     datasetId ? `Tracking dataset: ${datasetId}` : null
   ].filter(Boolean).join(" ");
 };
@@ -532,6 +533,70 @@ const formatEmailRows = (rows: Array<{ id: string; subdomain_id: string; address
   return rows.slice(0, 10).map((row) => `${row.id} ${row.subdomain_id} ${row.address}`).join("\n");
 };
 
+const getJobSourceLabel = (job: { payload?: Record<string, unknown> }): string | null => {
+  const payload = job.payload ?? {};
+  const input = payload.input && typeof payload.input === "object" ? (payload.input as { sourcePath?: unknown }) : null;
+  const sourcePath = typeof payload.sourcePath === "string" ? payload.sourcePath : typeof input?.sourcePath === "string" ? input.sourcePath : null;
+  if (!sourcePath || !sourcePath.trim()) {
+    return null;
+  }
+
+  return sourcePath;
+};
+
+const getJobResultCounts = (job: { payload?: Record<string, unknown> }): { raw: number; valid: number; duplicate: number; error: number } | null => {
+  const payload = job.payload ?? {};
+  const result = payload.result && typeof payload.result === "object" ? (payload.result as { counts?: { raw?: number; valid?: number; duplicate?: number; error?: number } }) : null;
+  if (!result?.counts) {
+    return null;
+  }
+
+  return {
+    raw: result.counts.raw ?? 0,
+    valid: result.counts.valid ?? 0,
+    duplicate: result.counts.duplicate ?? 0,
+    error: result.counts.error ?? 0
+  };
+};
+
+const formatIngestionJobSummary = (job: { id: string; status: string; payload?: Record<string, unknown>; error?: string | null }): string => {
+  const source = getJobSourceLabel(job) ?? "unknown file";
+  const counts = getJobResultCounts(job);
+  const autoSend = job.payload?.autoSend && typeof job.payload.autoSend === "object"
+    ? (job.payload.autoSend as { queued?: boolean; campaignId?: string; recipients?: number; reason?: string })
+    : null;
+
+  return [
+    `File: ${source}`,
+    `Status: ${job.status}`,
+    counts ? `Fetched: ${counts.raw}` : null,
+    counts ? `Added to recipients: ${counts.valid}` : null,
+    counts ? `Duplicates: ${counts.duplicate}` : null,
+    counts ? `Errors: ${counts.error}` : null,
+    autoSend?.queued ? `Auto-send: queued for campaign ${autoSend.campaignId ?? "unknown"}` : autoSend?.reason ? `Auto-send: not queued (${autoSend.reason})` : null,
+    job.error ? `Issue: ${job.error}` : null
+  ].filter(Boolean).join("\n");
+};
+
+const formatJobLine = (job: { id: string; type: string; status: string; progress: { processed: number; total: number }; payload?: Record<string, unknown>; error?: string }): string => {
+  if (job.type === "ingestion") {
+    const counts = getJobResultCounts(job);
+    return [
+      `${job.status}: ${getJobSourceLabel(job) ?? job.id}`,
+      counts ? `fetched ${counts.raw}, added ${counts.valid}, duplicates ${counts.duplicate}, errors ${counts.error}` : null
+    ].filter(Boolean).join(" | ");
+  }
+
+  if (job.type === "sending") {
+    const payload = job.payload ?? {};
+    const campaignId = typeof payload.campaignId === "string" ? payload.campaignId : null;
+    const recipientCount = Array.isArray(payload.recipients) ? payload.recipients.length : null;
+    return `${job.status}: send ${campaignId ? `campaign ${campaignId}` : job.id}${recipientCount !== null ? ` (${recipientCount} recipients)` : ""}`;
+  }
+
+  return `${job.type} ${job.status}`;
+};
+
 const formatSmtpRows = (rows: Array<{ id: string; email_account_id: string; host: string; port: number; username: string; status: string; use_tls: boolean; max_per_window: number; max_concurrent: number }>): string => {
   if (rows.length === 0) return "no_accounts";
   return rows.slice(0, 10).map((row) => `${row.id} ${row.username}@${row.host}:${row.port} [${row.status}] tls=${row.use_tls} window=${row.max_per_window} concurrent=${row.max_concurrent}`).join("\n");
@@ -575,17 +640,39 @@ const formatQueueSummary = (status: {
   sending: Record<string, number>;
   paused: { ingestion: boolean; sending: boolean };
   latestFailedSendingJob?: { id: string; error: string | null; finishedAt: string | null } | null;
+  liveJobs?: Array<{ id: string; type: string; status: string; progress: { processed: number; total: number }; payload?: Record<string, unknown>; error?: string }>;
+  latestIngestionJob?: { id: string; status: string; payload?: Record<string, unknown>; error?: string | null } | null;
+  latestSendingJob?: { id: string; status: string; payload?: Record<string, unknown>; error?: string | null } | null;
 }): string => {
   return [
-    formatPipelineSummary(status),
+    "Pipeline",
+    `Ingestion: ${status.paused.ingestion ? "paused" : status.ingestion.waiting + status.ingestion.active > 0 ? "working" : "ready"}`,
+    `Sending: ${status.paused.sending ? "paused" : status.sending.waiting + status.sending.active > 0 ? "working" : "ready"}`,
+    `Automatic handoff: ${status.paused.sending ? "held until sending resumes" : "enabled"}`,
     "",
-    "Technical queue counts",
-    formatCountBlock("Ingestion", status.ingestion),
-    formatCountBlock("Sending", status.sending),
-    `Paused: ingestion=${status.paused.ingestion ? "yes" : "no"}, sending=${status.paused.sending ? "yes" : "no"}`,
-    status.latestFailedSendingJob ? `Latest failed send job: ${status.latestFailedSendingJob.id}` : null,
+    "Live jobs:",
+    ...(status.liveJobs && status.liveJobs.length > 0
+      ? status.liveJobs.slice(0, 5).map((job) => `- ${formatJobLine(job)}`)
+      : ["- No jobs are currently waiting or running."]
+    ),
     "",
-    "Note: failed is historical, not a live error."
+    "Latest ingest",
+    status.latestIngestionJob ? formatIngestionJobSummary(status.latestIngestionJob) : "No ingest jobs yet.",
+    "",
+    "Latest send",
+    status.latestSendingJob
+      ? [
+          `Job: ${status.latestSendingJob.id}`,
+          `Status: ${status.latestSendingJob.status}`,
+          typeof status.latestSendingJob.payload?.campaignId === "string" ? `Campaign: ${status.latestSendingJob.payload.campaignId}` : null,
+          Array.isArray(status.latestSendingJob.payload?.recipients) ? `Recipients: ${(status.latestSendingJob.payload?.recipients as Array<unknown>).length}` : null,
+          status.latestSendingJob.error ? `Issue: ${status.latestSendingJob.error}` : null
+        ].filter(Boolean).join("\n")
+      : "No send jobs yet.",
+    "",
+    status.latestFailedSendingJob ? `Latest failed send: ${status.latestFailedSendingJob.error ?? status.latestFailedSendingJob.id}` : "No failed sends.",
+    "",
+    "This view shows the latest file and send activity, not the full historical queue."
   ].filter(Boolean).join("\n");
 };
 
@@ -667,22 +754,45 @@ const formatJobStatusSummary = (job: {
   createdAt: string;
   updatedAt: string;
   progress: { processed: number; total: number; failed: number };
-  payload?: { datasetId?: string; campaignId?: string; result?: unknown };
+  payload?: Record<string, unknown>;
   error?: string | null;
 }): string => {
-  const stage = job.type === "ingestion"
-    ? (job.status === "completed" ? "File processed" : job.status === "failed" ? "File processing failed" : "File is being processed")
-    : job.type === "sending"
-      ? (job.status === "completed" ? "Sending finished" : job.status === "failed" ? "Sending failed" : "Sending is in progress")
-      : `${job.type} job`;
+  if (job.type === "ingestion") {
+    return [
+      "Ingestion job",
+      `File: ${getJobSourceLabel(job) ?? job.id}`,
+      `Status: ${job.status}`,
+      `Fetched: ${getJobResultCounts(job)?.raw ?? job.progress.total ?? 0}`,
+      `Added to recipients: ${getJobResultCounts(job)?.valid ?? job.progress.processed ?? 0}`,
+      `Duplicates: ${getJobResultCounts(job)?.duplicate ?? 0}`,
+      `Errors: ${getJobResultCounts(job)?.error ?? job.progress.failed ?? 0}`,
+      job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
+      job.payload?.autoSend && typeof job.payload.autoSend === "object"
+        ? (job.payload.autoSend as { queued?: boolean; campaignId?: string; reason?: string }).queued
+          ? `Auto-send: queued for campaign ${(job.payload.autoSend as { campaignId?: string }).campaignId ?? "unknown"}`
+          : `Auto-send: not queued${(job.payload.autoSend as { reason?: string }).reason ? ` (${(job.payload.autoSend as { reason?: string }).reason})` : ""}`
+        : null,
+      job.error ? `Issue: ${job.error}` : null
+    ].filter(Boolean).join("\n");
+  }
+
+  if (job.type === "sending") {
+    const campaignId = typeof job.payload?.campaignId === "string" ? job.payload.campaignId : null;
+    const recipients = Array.isArray(job.payload?.recipients) ? (job.payload?.recipients as Array<unknown>).length : null;
+    return [
+      "Sending job",
+      `Status: ${job.status}`,
+      campaignId ? `Campaign: ${campaignId}` : null,
+      recipients !== null ? `Recipients in this batch: ${recipients}` : null,
+      `Progress: ${job.progress.processed}/${job.progress.total}`,
+      job.error ? `Issue: ${job.error}` : null
+    ].filter(Boolean).join("\n");
+  }
 
   return [
-    stage,
-    `Job ID: ${job.id}`,
-    `State: ${job.status}`,
+    `${job.type} job`,
+    `Status: ${job.status}`,
     `Progress: ${job.progress.processed}/${job.progress.total}`,
-    job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
-    job.payload?.campaignId ? `Campaign: ${String(job.payload.campaignId)}` : null,
     job.error ? `Issue: ${job.error}` : null
   ].filter(Boolean).join("\n");
 };
@@ -711,25 +821,28 @@ export const startDiscordBot = async (): Promise<void> => {
 
         if (interaction.customId === dashboardButtonIds.queue) {
           await interaction.deferReply({ ephemeral: true });
-          const status = await getQueueStatus();
+          const queueStatus = await getQueueStatus();
+          const summary = jobStore.getSummary();
+          const latestIngestionJob = summary.recent.find((job) => job.type === "ingestion") ?? null;
+          const latestSendingJob = summary.recent.find((job) => job.type === "sending") ?? null;
+          const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
+
+          let latestFailedSendingJob: { id: string; error: string | null; finishedAt: string | null } | null = null;
           if (config.databaseUrl) {
             const pool = getDatabasePool();
             const failedRes = await pool.query(
               `SELECT id, error, finished_at FROM jobs WHERE type = 'sending' AND status = 'failed' ORDER BY finished_at DESC NULLS LAST LIMIT 1`
             );
-            const latestFailedSendingJob = failedRes.rows[0]
+            latestFailedSendingJob = failedRes.rows[0]
               ? {
                   id: String(failedRes.rows[0].id),
                   error: failedRes.rows[0].error ? String(failedRes.rows[0].error) : null,
                   finishedAt: failedRes.rows[0].finished_at ? String(failedRes.rows[0].finished_at) : null
                 }
               : null;
-
-            await interaction.editReply(truncate(formatQueueSummary({ ...status, latestFailedSendingJob })));
-            return;
           }
 
-          await interaction.editReply(truncate(formatQueueSummary(status)));
+          await interaction.editReply(truncate(formatQueueSummary({ ...queueStatus, latestFailedSendingJob, latestIngestionJob, latestSendingJob, liveJobs })));
           return;
         }
 
@@ -754,16 +867,28 @@ export const startDiscordBot = async (): Promise<void> => {
         if (interaction.customId === dashboardButtonIds.status) {
           await interaction.deferReply({ ephemeral: true });
           const summary = jobStore.getSummary();
-          await interaction.editReply(truncate([
+          const latestIngestionJob = summary.recent.find((job) => job.type === "ingestion") ?? null;
+          const latestSendingJob = summary.recent.find((job) => job.type === "sending") ?? null;
+          const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
+          const message = [
             "Current pipeline",
-            `Waiting: ${summary.counts.pending ?? 0}`,
-            `Working: ${summary.counts.processing ?? 0}`,
-            `Done: ${summary.counts.completed ?? 0}`,
-            `Failed: ${summary.counts.failed ?? 0}`,
+            latestIngestionJob ? formatIngestionJobSummary(latestIngestionJob) : "No ingestion jobs yet.",
             "",
-            "Recent activity:",
-            ...summary.recent.slice(0, 5).map((job) => `- ${job.type} ${job.status} (${job.progress.processed}/${job.progress.total})`)
-          ].join("\n")));
+            latestSendingJob
+              ? [
+                  "Latest send",
+                  `Status: ${latestSendingJob.status}`,
+                  typeof latestSendingJob.payload?.campaignId === "string" ? `Campaign: ${latestSendingJob.payload.campaignId}` : null,
+                  Array.isArray(latestSendingJob.payload?.recipients) ? `Recipients: ${(latestSendingJob.payload?.recipients as Array<unknown>).length}` : null,
+                  latestSendingJob.error ? `Issue: ${latestSendingJob.error}` : null
+                ].filter(Boolean).join("\n")
+              : "No send jobs yet.",
+            "",
+            "Live work",
+            ...(liveJobs.length > 0 ? liveJobs.slice(0, 5).map((job) => `- ${formatJobLine(job)}`) : ["- No jobs are currently waiting or running."])
+          ].join("\n");
+
+          await interaction.editReply(truncate(message));
           return;
         }
 
@@ -929,7 +1054,34 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          await interaction.editReply(`Automatic sending started for the latest completed dataset using campaign ${result.campaignId}.`);
+          const queueStatus = await getQueueStatus();
+          const summary = jobStore.getSummary();
+          const latestIngestionJob = summary.recent.find((job) => job.type === "ingestion") ?? null;
+          const latestSendingJob = summary.recent.find((job) => job.type === "sending") ?? null;
+          const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
+
+          let latestFailedSendingJob: { id: string; error: string | null; finishedAt: string | null } | null = null;
+          if (config.databaseUrl) {
+            const pool = getDatabasePool();
+            const failedRes = await pool.query(
+              `SELECT id, error, finished_at FROM jobs WHERE type = 'sending' AND status = 'failed' ORDER BY finished_at DESC NULLS LAST LIMIT 1`
+            );
+            latestFailedSendingJob = failedRes.rows[0]
+              ? {
+                  id: String(failedRes.rows[0].id),
+                  error: failedRes.rows[0].error ? String(failedRes.rows[0].error) : null,
+                  finishedAt: failedRes.rows[0].finished_at ? String(failedRes.rows[0].finished_at) : null
+                }
+              : null;
+          }
+
+          await interaction.editReply(truncate([
+            `Automatic sending started for campaign ${result.campaignId}.`,
+            `Dataset: ${result.datasetId}`,
+            `Queued send jobs: ${result.queued}`,
+            "",
+            formatQueueSummary({ ...queueStatus, latestFailedSendingJob, latestIngestionJob, latestSendingJob, liveJobs })
+          ].join("\n")));
           return;
         }
       }
@@ -1151,15 +1303,27 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const summary = jobStore.getSummary();
+          const latestIngestionJob = summary.recent.find((job) => job.type === "ingestion") ?? null;
+          const latestSendingJob = summary.recent.find((job) => job.type === "sending") ?? null;
+          const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
         await commandInteraction.editReply(truncate([
-          "Current pipeline",
-          `Waiting: ${summary.counts.pending ?? 0}`,
-          `Working: ${summary.counts.processing ?? 0}`,
-          `Done: ${summary.counts.completed ?? 0}`,
-          `Failed: ${summary.counts.failed ?? 0}`,
+            "Current pipeline",
+            latestIngestionJob ? formatIngestionJobSummary(latestIngestionJob) : "No ingestion jobs yet.",
+            "",
+            latestSendingJob
+              ? [
+                  "Latest send",
+                  `Status: ${latestSendingJob.status}`,
+                  typeof latestSendingJob.payload?.campaignId === "string" ? `Campaign: ${latestSendingJob.payload.campaignId}` : null,
+                  Array.isArray(latestSendingJob.payload?.recipients) ? `Recipients: ${(latestSendingJob.payload?.recipients as Array<unknown>).length}` : null,
+                  latestSendingJob.error ? `Issue: ${latestSendingJob.error}` : null
+                ].filter(Boolean).join("\n")
+              : "No send jobs yet.",
           "",
           "Recent activity:",
-          ...summary.recent.slice(0, 5).map((job) => `- ${job.type} ${job.status} (${job.progress.processed}/${job.progress.total})`)
+            ...(liveJobs.length > 0
+              ? liveJobs.slice(0, 5).map((job) => `- ${formatJobLine(job)}`)
+              : ["- No jobs are currently waiting or running."])
         ].join("\n")));
         return;
       }
