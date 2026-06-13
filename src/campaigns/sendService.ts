@@ -34,7 +34,7 @@ export const selectCampaignById = async (campaignId: string, pool?: Pool): Promi
   const res = await database.query(
     `SELECT id, subject, body_html, body_text, from_address, reply_to
      FROM campaigns
-     WHERE id = $1 AND status = 'active' LIMIT 1`,
+     WHERE id = $1 AND status IN ('active','draft') LIMIT 1`,
     [campaignId]
   );
 
