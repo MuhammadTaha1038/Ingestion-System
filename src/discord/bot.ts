@@ -187,7 +187,7 @@ const createCampaignModal = (mode: "create" | "update") => {
     .setCustomId("campaign_id")
     .setLabel("Campaign ID (required for update)")
     .setStyle(TextInputStyle.Short)
-    .setRequired(false);
+    .setRequired(mode === "update");
 
   const name = new TextInputBuilder()
     .setCustomId("name")
@@ -213,18 +213,6 @@ const createCampaignModal = (mode: "create" | "update") => {
     .setStyle(TextInputStyle.Short)
     .setRequired(mode === "create");
 
-  const replyTo = new TextInputBuilder()
-    .setCustomId("reply_to")
-    .setLabel("Reply-to address")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false);
-
-  const status = new TextInputBuilder()
-    .setCustomId("status")
-    .setLabel("Status (draft/active/paused/archived)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false);
-
   return new ModalBuilder()
     .setCustomId(mode === "create" ? campaignCreateModalId : campaignUpdateModalId)
     .setTitle(mode === "create" ? "Create Campaign" : "Update Campaign")
@@ -233,80 +221,50 @@ const createCampaignModal = (mode: "create" | "update") => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(status)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
     );
 };
 
   const createSmtpModal = (mode: "create" | "update") => {
-    const id = new TextInputBuilder()
-      .setCustomId("id")
-      .setLabel(mode === "update" ? "SMTP account id (required for update)" : "SMTP account id (optional)")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(mode === "update");
-
-    const emailAccountId = new TextInputBuilder()
-      .setCustomId("email_account_id")
-      .setLabel("Email account id")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(mode === "create");
-
-    const host = new TextInputBuilder()
-      .setCustomId("host")
-      .setLabel("SMTP host")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(mode === "create");
-
-    const username = new TextInputBuilder()
-      .setCustomId("username")
-      .setLabel("SMTP username")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(mode === "create");
-
-    const password = new TextInputBuilder()
-      .setCustomId("password")
-      .setLabel("SMTP password or app password")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(mode === "create");
-
-    const port = new TextInputBuilder()
-      .setCustomId("port")
-      .setLabel("Port (default 587)")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
-
-    const useTls = new TextInputBuilder()
-      .setCustomId("use_tls")
-      .setLabel("Use TLS (true/false)")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
-
-    const maxPerWindow = new TextInputBuilder()
-      .setCustomId("max_per_window")
-      .setLabel("Max per window")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
-
-    const maxConcurrent = new TextInputBuilder()
-      .setCustomId("max_concurrent")
-      .setLabel("Max concurrent")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
+    if (mode === "create") {
+      return new ModalBuilder()
+        .setCustomId(smtpCreateModalId)
+        .setTitle("Create SMTP Account")
+        .addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("email_account_id").setLabel("Email account id").setStyle(TextInputStyle.Short).setRequired(true)
+          ),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("host").setLabel("SMTP host").setStyle(TextInputStyle.Short).setRequired(true)
+          ),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("username").setLabel("SMTP username").setStyle(TextInputStyle.Short).setRequired(true)
+          ),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("password").setLabel("SMTP password or app password").setStyle(TextInputStyle.Short).setRequired(true)
+          )
+        );
+    }
 
     return new ModalBuilder()
-      .setCustomId(mode === "create" ? smtpCreateModalId : smtpUpdateModalId)
-      .setTitle(mode === "create" ? "Create SMTP Account" : "Update SMTP Account")
+      .setCustomId(smtpUpdateModalId)
+      .setTitle("Update SMTP Account")
       .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(id),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(host),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(username),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(password),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(port),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(useTls),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(maxPerWindow),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(maxConcurrent)
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId("id").setLabel("SMTP account id").setStyle(TextInputStyle.Short).setRequired(true)
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId("host").setLabel("SMTP host").setStyle(TextInputStyle.Short).setRequired(false)
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId("username").setLabel("SMTP username").setStyle(TextInputStyle.Short).setRequired(false)
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId("password").setLabel("SMTP password or app password").setStyle(TextInputStyle.Short).setRequired(false)
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder().setCustomId("port").setLabel("Port").setStyle(TextInputStyle.Short).setRequired(false)
+        )
       );
   };
 
@@ -993,8 +951,6 @@ export const startDiscordBot = async (): Promise<void> => {
           const subject = interaction.fields.getTextInputValue("subject").trim();
           const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
           const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
-          const replyTo = interaction.fields.getTextInputValue("reply_to").trim();
-          const status = interaction.fields.getTextInputValue("status").trim();
 
           if (interaction.customId === campaignUpdateModalId && !campaignId) {
             await interaction.editReply("campaign_id_required_for_update");
@@ -1006,9 +962,7 @@ export const startDiscordBot = async (): Promise<void> => {
             name,
             subject,
             bodyHtml,
-            fromAddress,
-            replyTo: replyTo || null,
-            status: status || null
+            fromAddress
           });
           await interaction.editReply(message);
           return;
@@ -1048,28 +1002,12 @@ export const startDiscordBot = async (): Promise<void> => {
           }
 
           const repo = new SmtpRepository();
-          const id = interaction.fields.getTextInputValue("id").trim();
-          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim();
-          const host = interaction.fields.getTextInputValue("host").trim();
-          const username = interaction.fields.getTextInputValue("username").trim();
-          const password = interaction.fields.getTextInputValue("password").trim();
-          const portText = interaction.fields.getTextInputValue("port").trim();
-          const useTlsText = interaction.fields.getTextInputValue("use_tls").trim().toLowerCase();
-          const maxPerWindowText = interaction.fields.getTextInputValue("max_per_window").trim();
-          const maxConcurrentText = interaction.fields.getTextInputValue("max_concurrent").trim();
-
-          const parseNumber = (value: string): number | undefined => {
-            if (!value) return undefined;
-            const parsed = Number(value);
-            return Number.isFinite(parsed) ? parsed : undefined;
-          };
-
-          const useTls = useTlsText ? useTlsText === "true" : undefined;
-          const port = parseNumber(portText);
-          const maxPerWindow = parseNumber(maxPerWindowText);
-          const maxConcurrent = parseNumber(maxConcurrentText);
-
           if (interaction.customId === smtpCreateModalId) {
+            const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim();
+            const host = interaction.fields.getTextInputValue("host").trim();
+            const username = interaction.fields.getTextInputValue("username").trim();
+            const password = interaction.fields.getTextInputValue("password").trim();
+
             if (!emailAccountId || !host || !username || !password) {
               await interaction.editReply("missing_required_smtp_fields");
               return;
@@ -1078,17 +1016,31 @@ export const startDiscordBot = async (): Promise<void> => {
             const createdId = await repo.createSmtpAccount({
               emailAccountId,
               host,
-              port: port ?? 587,
+              port: 587,
               username,
               passwordEncrypted: encrypt(password),
-              useTls,
-              maxPerWindow,
-              maxConcurrent
+              useTls: true,
+              maxPerWindow: 50,
+              maxConcurrent: 1
             });
 
             await interaction.editReply(`created smtp account ${createdId}. Use SMTP List to verify it.`);
             return;
           }
+
+          const id = interaction.fields.getTextInputValue("id").trim();
+          const host = interaction.fields.getTextInputValue("host").trim();
+          const username = interaction.fields.getTextInputValue("username").trim();
+          const password = interaction.fields.getTextInputValue("password").trim();
+          const portText = interaction.fields.getTextInputValue("port").trim();
+
+          const parseNumber = (value: string): number | undefined => {
+            if (!value) return undefined;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : undefined;
+          };
+
+          const port = parseNumber(portText);
 
           if (!id) {
             await interaction.editReply("smtp_account_id_required_for_update");
@@ -1100,18 +1052,12 @@ export const startDiscordBot = async (): Promise<void> => {
             port?: number;
             username?: string;
             passwordEncrypted?: string;
-            useTls?: boolean;
-            maxPerWindow?: number;
-            maxConcurrent?: number;
           } = {};
 
           if (host) patch.host = host;
           if (typeof port === "number") patch.port = port;
           if (username) patch.username = username;
           if (password) patch.passwordEncrypted = encrypt(password);
-          if (typeof useTls === "boolean") patch.useTls = useTls;
-          if (typeof maxPerWindow === "number") patch.maxPerWindow = maxPerWindow;
-          if (typeof maxConcurrent === "number") patch.maxConcurrent = maxConcurrent;
 
           if (Object.keys(patch).length === 0) {
             await interaction.editReply("no_fields_to_update");
