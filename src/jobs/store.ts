@@ -3,7 +3,7 @@ import { JobRecord, JobSummary, JobType } from "./types.js";
 import { JobStatus } from "../types/index.js";
 
 export interface JobStore {
-  createJob: (type: JobType, payload?: Record<string, unknown>) => JobRecord;
+  createJob: (type: JobType, payload?: Record<string, unknown>, id?: string) => JobRecord;
   updateJob: (id: string, patch: Partial<Omit<JobRecord, "id" | "createdAt">>) => JobRecord | null;
   getJob: (id: string) => JobRecord | null;
   getSummary: (limit?: number) => JobSummary;
@@ -12,10 +12,10 @@ export interface JobStore {
 export class InMemoryJobStore implements JobStore {
   private readonly jobs = new Map<string, JobRecord>();
 
-  createJob(type: JobType, payload?: Record<string, unknown>): JobRecord {
+  createJob(type: JobType, payload?: Record<string, unknown>, id?: string): JobRecord {
     const now = new Date().toISOString();
     const job: JobRecord = {
-      id: randomUUID(),
+      id: id ?? randomUUID(),
       type,
       status: "pending",
       createdAt: now,

@@ -3,6 +3,7 @@ import { Pool } from "pg";
 import { getDatabasePool } from "../db/pool.js";
 import { JobRepository } from "../db/repositories/jobs.js";
 import { sendingQueue } from "../queue/queues.js";
+import { jobStore } from "../jobs/store.js";
 
 export interface CampaignSendDefinition {
   id: string;
@@ -20,8 +21,21 @@ export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefin
   const res = await database.query(
     `SELECT id, subject, body_html, body_text, from_address, reply_to
      FROM campaigns
-     ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, created_at DESC
+     WHERE status = 'active'
+     ORDER BY created_at DESC
      LIMIT 1`
+  );
+
+  return (res.rows[0] as CampaignSendDefinition | undefined) ?? null;
+};
+
+export const selectCampaignById = async (campaignId: string, pool?: Pool): Promise<CampaignSendDefinition | null> => {
+  const database = getPool(pool);
+  const res = await database.query(
+    `SELECT id, subject, body_html, body_text, from_address, reply_to
+     FROM campaigns
+     WHERE id = $1 AND status = 'active' LIMIT 1`,
+    [campaignId]
   );
 
   return (res.rows[0] as CampaignSendDefinition | undefined) ?? null;
@@ -59,6 +73,12 @@ export const enqueueCampaignSendForDataset = async (args: {
       datasetId: args.datasetId
     });
 
+    jobStore.createJob("sending", {
+      campaignId: args.campaign.id,
+      datasetId: args.datasetId,
+      recipients: batch.length
+    }, sendJobId);
+
     await sendingQueue.add(
       "send",
       {
@@ -79,7 +99,24 @@ export const enqueueCampaignSendForDataset = async (args: {
   };
 };
 
-export const autoSendDatasetIfPossible = async (datasetId: string, pool?: Pool): Promise<{ queued: number; campaignId: string; recipients: number } | null> => {
+export const sendDatasetWithCampaign = async (args: {
+  datasetId: string;
+  campaignId: string;
+  pool?: Pool;
+}): Promise<{ queued: number; campaignId: string; recipients: number } | null> => {
+  const campaign = await selectCampaignById(args.campaignId, args.pool);
+  if (!campaign) {
+    return null;
+  }
+
+  return await enqueueCampaignSendForDataset({ datasetId: args.datasetId, campaign, pool: args.pool });
+};
+
+export const autoSendDatasetIfPossible = async (datasetId: string, pool?: Pool, campaignId?: string): Promise<{ queued: number; campaignId: string; recipients: number } | null> => {
+  if (campaignId) {
+    return await sendDatasetWithCampaign({ datasetId, campaignId, pool });
+  }
+
   const campaign = await selectAutoCampaign(pool);
   if (!campaign) {
     return null;

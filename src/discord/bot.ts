@@ -27,7 +27,7 @@ import { getRecentLogs } from "../logging/logger.js";
 import { getDatabasePool } from "../db/pool.js";
 import { InputFormat } from "../ingestion/types.js";
 import { getSendingWindowState } from "../scheduler/windowScheduler.js";
-import { autoSendLatestCompletedDataset } from "../campaigns/sendService.js";
+import { autoSendLatestCompletedDataset, selectCampaignById, sendDatasetWithCampaign } from "../campaigns/sendService.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -173,12 +173,20 @@ const createIngestModal = () => {
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
 
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID (optional)")
+    .setPlaceholder("Use a specific campaign for this ingest")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
   return new ModalBuilder()
     .setCustomId(ingestModalId)
     .setTitle("Ingest Data")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(format)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(format),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
     );
 };
 
@@ -323,6 +331,17 @@ const queueDashboardIngestion = async (args: {
     return "missing_content_or_source_path";
   }
 
+  if (args.campaignId) {
+    if (!config.databaseUrl) {
+      return "db_required";
+    }
+
+    const campaign = await selectCampaignById(args.campaignId);
+    if (!campaign) {
+      return "campaign_not_found";
+    }
+  }
+
   const inputFormat = format as InputFormat;
 
   let datasetId: string | null = null;
@@ -367,7 +386,9 @@ const queueDashboardIngestion = async (args: {
     "File accepted.",
     "Processing has started.",
     "When ingestion completes, Status will show fetched, added, duplicate, and error counts for this file.",
-    "If an active campaign exists, auto-send will be queued automatically.",
+    args.campaignId
+      ? `This ingest will use campaign ${args.campaignId} if the campaign exists.`
+      : "If an active campaign exists, auto-send will be queued automatically.",
     datasetId ? `Tracking dataset: ${datasetId}` : null
   ].filter(Boolean).join(" ");
 };
@@ -377,55 +398,12 @@ const queueCampaignSend = async (campaignId: string, datasetId: string): Promise
     return "db_required";
   }
 
-  const pool = getDatabasePool();
-  const campaignRes = await pool.query(
-    `SELECT subject, body_html, body_text, from_address, reply_to FROM campaigns WHERE id = $1`,
-    [campaignId]
-  );
-  if (!campaignRes.rows[0]) {
+  const result = await sendDatasetWithCampaign({ campaignId, datasetId });
+  if (!result) {
     return "campaign_not_found";
   }
 
-  const campaign = campaignRes.rows[0] as {
-    subject: string;
-    body_html: string;
-    body_text: string | null;
-    from_address: string;
-    reply_to: string | null;
-  };
-  const res = await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId]);
-  const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
-  const batchSize = 50;
-  const jobRepo = new JobRepository();
-
-  for (let i = 0; i < emails.length; i += batchSize) {
-    const sendJobId = randomUUID();
-    const batch = emails.slice(i, i + batchSize).map((email: string) => ({
-      to: email,
-      subject: campaign.subject,
-      html: campaign.body_html,
-      text: campaign.body_text ?? undefined
-    }));
-    await jobRepo.createJob({
-      id: sendJobId,
-      type: "sending",
-      status: "pending",
-      campaignId
-    });
-    await sendingQueue.add(
-      "send",
-      {
-        campaignId,
-        windowId: "",
-        fromAddress: campaign.from_address,
-        replyTo: campaign.reply_to ?? undefined,
-        recipients: batch
-      },
-      { jobId: sendJobId, removeOnComplete: true }
-    );
-  }
-
-  return `triggered campaign ${campaignId}, queued ${Math.ceil(emails.length / batchSize)} send jobs for dataset ${datasetId}`;
+  return `triggered campaign ${result.campaignId}, queued ${result.queued} send jobs for dataset ${datasetId}`;
 };
 
 const formatSimpleRows = (title: string, rows: string[]): string => {
@@ -590,7 +568,11 @@ const formatJobLine = (job: { id: string; type: string; status: string; progress
   if (job.type === "sending") {
     const payload = job.payload ?? {};
     const campaignId = typeof payload.campaignId === "string" ? payload.campaignId : null;
-    const recipientCount = Array.isArray(payload.recipients) ? payload.recipients.length : null;
+    const recipientCount = Array.isArray(payload.recipients)
+      ? payload.recipients.length
+      : typeof payload.recipients === "number"
+        ? payload.recipients
+        : null;
     return `${job.status}: send ${campaignId ? `campaign ${campaignId}` : job.id}${recipientCount !== null ? ` (${recipientCount} recipients)` : ""}`;
   }
 
@@ -1091,7 +1073,8 @@ export const startDiscordBot = async (): Promise<void> => {
           await interaction.deferReply({ ephemeral: true });
           const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
           const format = interaction.fields.getTextInputValue("format").trim().toLowerCase();
-          const message = await queueDashboardIngestion({ format, sourcePath });
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim() || undefined;
+          const message = await queueDashboardIngestion({ format, sourcePath, campaignId });
           await interaction.editReply(message);
           return;
         }

@@ -249,7 +249,7 @@ export const startIngestionWorker = (): void => {
         });
       }
 
-      const autoSendResult = datasetId ? await autoSendDatasetIfPossible(datasetId) : null;
+      const autoSendResult = datasetId ? await autoSendDatasetIfPossible(datasetId, undefined, job.data.campaignId) : null;
       if (autoSendResult) {
         const existingJob = jobStore.getJob(jobId);
         jobStore.updateJob(jobId, {
@@ -277,11 +277,15 @@ export const startIngestionWorker = (): void => {
             ...existingJob?.payload,
             autoSend: {
               queued: false,
-              reason: "no_active_campaign"
+              reason: job.data.campaignId ? "campaign_not_found" : "no_active_campaign"
             }
           }
         });
-        logger.info("ingestion completed without auto send target", { jobId, datasetId });
+        logger.info("ingestion completed without auto send target", {
+          jobId,
+          datasetId,
+          requestedCampaignId: job.data.campaignId ?? null
+        });
       }
 
       logger.info("ingestion job completed", { jobId });

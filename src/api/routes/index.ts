@@ -9,6 +9,8 @@ import { InputFormat } from "../../ingestion/types.js";
 import { ingestionQueue } from "../../queue/queues.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../../queue/status.js";
 import { jobStore } from "../../jobs/store.js";
+import { getDatabasePool } from "../../db/pool.js";
+import { sendDatasetWithCampaign } from "../../campaigns/sendService.js";
 
 const notReady = (feature: string) => ({
   status: "not_ready",
@@ -37,12 +39,16 @@ const parseIngestBody = (body: unknown) => {
   }
 
   const payload = body as Record<string, unknown>;
-  const format = payload.format;
+  const rawFormat = payload.format;
   const content = payload.content;
   const sourcePath = payload.sourcePath;
   const campaignId = payload.campaignId;
 
-  if (typeof format !== "string" || !allowedFormats.includes(format as InputFormat)) {
+  const format = typeof rawFormat === "string" && rawFormat.trim().length > 0
+    ? rawFormat.trim().toLowerCase()
+    : "auto";
+
+  if (!allowedFormats.includes(format as InputFormat)) {
     return { error: "invalid_format" };
   }
 
@@ -625,60 +631,14 @@ export const registerRoutes = (server: FastifyInstance): void => {
     }
 
     try {
-      const pool = await (await import("../../db/pool.js")).getDatabasePool();
-      const campaignRes = await pool.query(
-        `SELECT subject, body_html, body_text, from_address, reply_to FROM campaigns WHERE id = $1`,
-        [id]
-      );
-      if (!campaignRes.rows[0]) {
+      const pool = await getDatabasePool();
+      const sendResult = await sendDatasetWithCampaign({ datasetId, campaignId: id, pool });
+      if (!sendResult) {
         reply.code(404).send({ error: "not_found" });
         return;
       }
 
-      const campaign = campaignRes.rows[0] as {
-        subject: string;
-        body_html: string;
-        body_text: string | null;
-        from_address: string;
-        reply_to: string | null;
-      };
-      const res = await pool.query(`SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1`, [datasetId]);
-      const emails = res.rows.map((r: { email_normalized: string }) => r.email_normalized);
-
-      const { sendingQueue } = await import("../../queue/queues.js");
-
-      const batchSize = 50;
-      for (let i = 0; i < emails.length; i += batchSize) {
-        const sendJobId = randomUUID();
-        const batch = emails.slice(i, i + batchSize).map((email: string) => ({
-          to: email,
-          subject: campaign.subject,
-          html: campaign.body_html,
-          text: campaign.body_text ?? undefined
-        }));
-        if (jobRepo) {
-          await jobRepo.createJob({
-            id: sendJobId,
-            type: "sending",
-            status: "pending",
-            campaignId: id
-          });
-        }
-
-        await sendingQueue.add(
-          "send",
-          {
-            campaignId: id,
-            windowId: "",
-            fromAddress: campaign.from_address,
-            replyTo: campaign.reply_to ?? undefined,
-            recipients: batch
-          },
-          { jobId: sendJobId, removeOnComplete: true }
-        );
-      }
-
-      reply.send(ok({ queued: Math.ceil(emails.length / batchSize), datasetId }));
+      reply.send(ok({ queued: sendResult.queued, campaignId: sendResult.campaignId, recipients: sendResult.recipients }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });
     }

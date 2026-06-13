@@ -32,7 +32,7 @@ export const startSendingWorker = (): void => {
         }
 
         try {
-          const jobRecord = jobStore.getJob(job.data.campaignId ?? job.id);
+          const jobRecord = jobStore.getJob(String(job.id));
           if (jobRecord) {
             jobStore.updateJob(jobRecord.id, { status: "completed" });
           }
@@ -110,7 +110,7 @@ export const startSendingWorker = (): void => {
 
       // Mark the job as completed in the in-memory job store if present
       try {
-        const jobRecord = jobStore.getJob(job.data.campaignId ?? job.id);
+        const jobRecord = jobStore.getJob(String(job.id));
         if (jobRecord) {
           jobStore.updateJob(jobRecord.id, { status: "completed" });
         }
@@ -128,7 +128,7 @@ export const startSendingWorker = (): void => {
       }
 
       try {
-        const jobRecord = jobStore.getJob(job.data.campaignId ?? job.id);
+        const jobRecord = jobStore.getJob(String(job.id));
         if (jobRecord) {
           jobStore.updateJob(jobRecord.id, { status: "failed", error: message });
         }
