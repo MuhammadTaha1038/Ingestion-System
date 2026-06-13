@@ -22,6 +22,7 @@ import { runIngestion } from "./pipeline.js";
 import { IngestionInput, IngestionResult } from "./types.js";
 import { jobStore } from "../jobs/store.js";
 import { resolveIngestionChunks } from "./autoDetect.js";
+import { autoSendDatasetIfPossible } from "../campaigns/sendService.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -246,6 +247,19 @@ export const startIngestionWorker = (): void => {
           processed: aggregateResult.counts.valid,
           failed: aggregateResult.counts.error
         });
+      }
+
+      const autoSendResult = datasetId ? await autoSendDatasetIfPossible(datasetId) : null;
+      if (autoSendResult) {
+        logger.info("automatic campaign send queued", {
+          jobId,
+          datasetId,
+          campaignId: autoSendResult.campaignId,
+          recipients: autoSendResult.recipients,
+          queued: autoSendResult.queued
+        });
+      } else {
+        logger.info("ingestion completed without auto send target", { jobId, datasetId });
       }
 
       logger.info("ingestion job completed", { jobId });

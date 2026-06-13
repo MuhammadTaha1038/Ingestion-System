@@ -27,6 +27,7 @@ import { getRecentLogs } from "../logging/logger.js";
 import { getDatabasePool } from "../db/pool.js";
 import { InputFormat } from "../ingestion/types.js";
 import { getSendingWindowState } from "../scheduler/windowScheduler.js";
+import { autoSendLatestCompletedDataset } from "../campaigns/sendService.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -204,6 +205,12 @@ const createCampaignModal = (mode: "create" | "update") => {
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
 
+  const status = new TextInputBuilder()
+    .setCustomId("status")
+    .setLabel("Status (draft/active/paused/archived)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
   return new ModalBuilder()
     .setCustomId(mode === "create" ? campaignCreateModalId : campaignUpdateModalId)
     .setTitle(mode === "create" ? "Create Campaign" : "Update Campaign")
@@ -213,7 +220,8 @@ const createCampaignModal = (mode: "create" | "update") => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
       new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(status)
     );
 };
 
@@ -284,7 +292,7 @@ const queueDashboardIngestion = async (args: {
   }
 
   const job = jobStore.createJob("ingestion", {
-    format: args.format,
+    format: inputFormat,
     sourcePath: args.sourcePath ?? null,
     campaignId: args.campaignId ?? null,
     datasetId
@@ -395,23 +403,45 @@ const saveCampaignFromModal = async (args: {
   bodyHtml: string;
   fromAddress: string;
   replyTo?: string | null;
+  status?: string | null;
 }): Promise<string> => {
   if (!config.databaseUrl) {
     return "db_required";
   }
 
+  const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
+  const status = args.status ? args.status.toLowerCase() : null;
+  if (status && !allowedStatuses.has(status)) {
+    return "invalid_status";
+  }
+
   const pool = getDatabasePool();
   if (args.campaignId) {
+    const fields = ["name = $1", "subject = $2", "body_html = $3", "from_address = $4", "reply_to = $5"];
+    const values: unknown[] = [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null];
+    if (status) {
+      fields.push(`status = $${fields.length + 1}`);
+      values.push(status);
+    }
+    values.push(args.campaignId);
     const res = await pool.query(
-      `UPDATE campaigns SET name = $1, subject = $2, body_html = $3, from_address = $4, reply_to = $5 WHERE id = $6 RETURNING id`,
-      [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null, args.campaignId]
+      `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id`,
+      values
     );
     return res.rows[0] ? `updated campaign ${res.rows[0].id}` : "campaign_not_found";
   }
 
+  const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
+  const createValues: unknown[] = [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null];
+  if (status) {
+    createFields.push("status");
+    createValues.push(status);
+  }
+
+  const placeholders = createValues.map((_, index) => `$${index + 1}`).join(",");
   const res = await pool.query(
-    `INSERT INTO campaigns (name, subject, body_html, from_address, reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-    [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null]
+    `INSERT INTO campaigns (${createFields.join(",")}) VALUES (${placeholders}) RETURNING id`,
+    createValues
   );
   return `created campaign ${res.rows[0].id}`;
 };
@@ -743,18 +773,19 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.send) {
-          const sendModal = new ModalBuilder()
-            .setCustomId("dashboard:send-modal")
-            .setTitle("Start Sending")
-            .addComponents(
-              new ActionRowBuilder<TextInputBuilder>().addComponents(
-                new TextInputBuilder().setCustomId("campaign_id").setLabel("Campaign ID").setStyle(TextInputStyle.Short).setRequired(true)
-              ),
-              new ActionRowBuilder<TextInputBuilder>().addComponents(
-                new TextInputBuilder().setCustomId("dataset_id").setLabel("Dataset ID").setStyle(TextInputStyle.Short).setRequired(true)
-              )
-            );
-          await interaction.showModal(sendModal);
+          await interaction.deferReply({ ephemeral: true });
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const result = await autoSendLatestCompletedDataset();
+          if (!result) {
+            await interaction.editReply("no_completed_dataset_or_campaign_available");
+            return;
+          }
+
+          await interaction.editReply(`sending queued automatically for dataset ${result.datasetId} using campaign ${result.campaignId}`);
           return;
         }
       }
@@ -777,6 +808,7 @@ export const startDiscordBot = async (): Promise<void> => {
           const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
           const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
           const replyTo = interaction.fields.getTextInputValue("reply_to").trim();
+          const status = interaction.fields.getTextInputValue("status").trim();
 
           if (interaction.customId === campaignUpdateModalId && !campaignId) {
             await interaction.editReply("campaign_id_required_for_update");
@@ -789,7 +821,8 @@ export const startDiscordBot = async (): Promise<void> => {
             subject,
             bodyHtml,
             fromAddress,
-            replyTo: replyTo || null
+            replyTo: replyTo || null,
+            status: status || null
           });
           await interaction.editReply(message);
           return;
@@ -821,14 +854,6 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
-        if (interaction.customId === "dashboard:send-modal") {
-          await interaction.deferReply({ ephemeral: true });
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
-          const datasetId = interaction.fields.getTextInputValue("dataset_id").trim();
-          const message = await queueCampaignSend(campaignId, datasetId);
-          await interaction.editReply(message);
-          return;
-        }
       }
 
       if (!interaction.isChatInputCommand()) return;
@@ -842,7 +867,7 @@ export const startDiscordBot = async (): Promise<void> => {
             "Discord operations dashboard",
             "Use the buttons below for the live control panel.",
             "Ingestion opens a modal; queue, status, accounts, window, campaigns, storage, cPanel, subdomains, emails, pause, and resume are exposed as live controls.",
-            "Sending still requires campaign_id and dataset_id.",
+            "Sending uses the latest completed dataset automatically when a campaign exists.",
             "If you came here from a plain status command, use this dashboard for the UI buttons."
           ].join("\n"),
           components: createDashboardComponents()

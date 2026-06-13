@@ -20,7 +20,8 @@
     "fastify": "^4.28.1",
     "ioredis": "^5.4.1",
     "luxon": "^3.5.0",
-    "pg": "^8.12.0"
+    "pg": "^8.12.0",
+    "xlsx": "^0.18.5"
   },
   "optionalDependencies": {
     "nodemailer": "^6.9.4"
@@ -34,6 +35,7 @@
     "@types/node": "^20.14.0",
     "@types/nodemailer": "^6.4.17",
     "@types/pg": "^8.11.10",
+    "@types/xlsx": "^0.0.35",
     "mailparser": "^3.9.9",
     "smtp-server": "^3.8.0",
     "tsx": "^4.17.0",

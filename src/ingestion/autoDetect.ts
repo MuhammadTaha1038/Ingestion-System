@@ -1,5 +1,6 @@
 import AdmZip from "adm-zip";
 import { extname } from "path";
+import XLSX from "xlsx";
 import { InputFormat } from "./types.js";
 
 export type AutoDetectedFormat = Exclude<InputFormat, "auto">;
@@ -32,6 +33,11 @@ const looksLikeCsv = (content: string): boolean => {
     const counts = lines.map((line) => line.split(separator).length);
     return counts.every((count) => count > 1) && counts.some((count) => count > 2 || count === 2);
   });
+};
+
+const isExcelExtension = (sourceName: string): boolean => {
+  const extension = extname(sourceName).toLowerCase();
+  return [".xlsx", ".xls", ".xlsm"].includes(extension);
 };
 
 const detectTextFormat = (content: string, sourceName?: string): AutoDetectedFormat => {
@@ -98,10 +104,35 @@ const extractZipChunks = (buffer: Buffer, sourceName: string): ResolvedIngestion
   return chunks;
 };
 
+const extractExcelChunks = (buffer: Buffer, sourceName: string): ResolvedIngestionChunk[] => {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const chunks: ResolvedIngestionChunk[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) {
+      continue;
+    }
+
+    const content = XLSX.utils.sheet_to_csv(worksheet);
+    chunks.push({
+      format: detectTextFormat(content, `${sourceName}#${sheetName}.csv`),
+      content,
+      sourceName: `${sourceName}#${sheetName}`
+    });
+  }
+
+  return chunks;
+};
+
 export const resolveIngestionChunks = (buffer: Buffer, sourceName?: string): ResolvedIngestionChunk[] => {
   const name = sourceName ?? "inline";
   if (isZipBuffer(buffer) || extname(name).toLowerCase() === ".zip") {
     return extractZipChunks(buffer, name);
+  }
+
+  if (isExcelExtension(name)) {
+    return extractExcelChunks(buffer, name);
   }
 
   const content = buffer.toString("utf-8");
