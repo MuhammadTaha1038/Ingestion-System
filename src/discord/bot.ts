@@ -320,7 +320,12 @@ const queueDashboardIngestion = async (args: {
     { jobId: job.id }
   );
 
-  return `queued ingestion job ${job.id}${datasetId ? ` dataset=${datasetId}` : ""}`;
+  return [
+    "File accepted.",
+    "Processing has started.",
+    "When ingestion completes, the active campaign will be sent automatically if one is available.",
+    datasetId ? `Tracking dataset: ${datasetId}` : null
+  ].filter(Boolean).join(" ");
 };
 
 const queueCampaignSend = async (campaignId: string, datasetId: string): Promise<string> => {
@@ -497,6 +502,31 @@ const formatCountBlock = (title: string, counts: Record<string, number>): string
   return [title, ...lines].join("\n");
 };
 
+const formatPipelineSummary = (status: {
+  ingestion: Record<string, number>;
+  sending: Record<string, number>;
+  paused: { ingestion: boolean; sending: boolean };
+  latestFailedSendingJob?: { id: string; error: string | null; finishedAt: string | null } | null;
+}): string => {
+  const ingestionBusy = (status.ingestion.waiting ?? 0) > 0 || (status.ingestion.active ?? 0) > 0;
+  const sendingBusy = (status.sending.waiting ?? 0) > 0 || (status.sending.active ?? 0) > 0;
+  const ingestionState = status.paused.ingestion ? "paused" : ingestionBusy ? "working" : "ready";
+  const sendingState = status.paused.sending ? "paused" : sendingBusy ? "working" : "ready";
+  const sendIssue = status.latestFailedSendingJob?.error
+    ? `A previous send failed because of SMTP/server settings. The file pipeline still stays automatic.`
+    : null;
+
+  return [
+    "Pipeline status",
+    `Ingestion: ${ingestionState}`,
+    `Sending: ${sendingState}`,
+    `Automatic handoff: ${status.paused.sending ? "held until sending resumes" : "enabled"}`,
+    sendIssue,
+    "Use the dashboard buttons for upload, campaign setup, and live status.",
+    "Queue details are available for troubleshooting, but the normal flow is upload -> process -> send."
+  ].filter(Boolean).join("\n");
+};
+
 const formatQueueSummary = (status: {
   ingestion: Record<string, number>;
   sending: Record<string, number>;
@@ -504,14 +534,15 @@ const formatQueueSummary = (status: {
   latestFailedSendingJob?: { id: string; error: string | null; finishedAt: string | null } | null;
 }): string => {
   return [
-    "Queue summary",
+    formatPipelineSummary(status),
+    "",
+    "Technical queue counts",
     formatCountBlock("Ingestion", status.ingestion),
     formatCountBlock("Sending", status.sending),
     `Paused: ingestion=${status.paused.ingestion ? "yes" : "no"}, sending=${status.paused.sending ? "yes" : "no"}`,
-    status.latestFailedSendingJob ? `Latest failed send: ${status.latestFailedSendingJob.id} error=${status.latestFailedSendingJob.error ?? "none"}` : null,
+    status.latestFailedSendingJob ? `Latest failed send job: ${status.latestFailedSendingJob.id}` : null,
     "",
-    "Note: `failed` is historical job failure count, not a live error.",
-    "If sending is failing, check `/smtp-failures` and `/job-status id:<job_id>`."
+    "Note: failed is historical, not a live error."
   ].filter(Boolean).join("\n");
 };
 
@@ -584,6 +615,33 @@ const formatWindowSettings = (settings: {
     `Current window: ${new Date(state.windowStart).toLocaleString("en-PK", { timeZone: settings.sending_window_tz })} -> ${new Date(state.windowEnd).toLocaleString("en-PK", { timeZone: settings.sending_window_tz })}`,
     `Active now: ${state.isActive ? "yes" : "no"}`
   ].join("\n");
+};
+
+const formatJobStatusSummary = (job: {
+  id: string;
+  type: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  progress: { processed: number; total: number; failed: number };
+  payload?: { datasetId?: string; campaignId?: string; result?: unknown };
+  error?: string | null;
+}): string => {
+  const stage = job.type === "ingestion"
+    ? (job.status === "completed" ? "File processed" : job.status === "failed" ? "File processing failed" : "File is being processed")
+    : job.type === "sending"
+      ? (job.status === "completed" ? "Sending finished" : job.status === "failed" ? "Sending failed" : "Sending is in progress")
+      : `${job.type} job`;
+
+  return [
+    stage,
+    `Job ID: ${job.id}`,
+    `State: ${job.status}`,
+    `Progress: ${job.progress.processed}/${job.progress.total}`,
+    job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
+    job.payload?.campaignId ? `Campaign: ${String(job.payload.campaignId)}` : null,
+    job.error ? `Issue: ${job.error}` : null
+  ].filter(Boolean).join("\n");
 };
 
 export const startDiscordBot = async (): Promise<void> => {
@@ -781,11 +839,11 @@ export const startDiscordBot = async (): Promise<void> => {
 
           const result = await autoSendLatestCompletedDataset();
           if (!result) {
-            await interaction.editReply("no_completed_dataset_or_campaign_available");
+            await interaction.editReply("No completed dataset and active campaign were found yet. Upload a file first, then make sure a campaign is active.");
             return;
           }
 
-          await interaction.editReply(`sending queued automatically for dataset ${result.datasetId} using campaign ${result.campaignId}`);
+          await interaction.editReply(`Automatic sending started for the latest completed dataset using campaign ${result.campaignId}.`);
           return;
         }
       }
@@ -864,11 +922,10 @@ export const startDiscordBot = async (): Promise<void> => {
       if (commandName === "dashboard") {
         await commandInteraction.editReply({
           content: [
-            "Discord operations dashboard",
-            "Use the buttons below for the live control panel.",
-            "Ingestion opens a modal; queue, status, accounts, window, campaigns, storage, cPanel, subdomains, emails, pause, and resume are exposed as live controls.",
-            "Sending uses the latest completed dataset automatically when a campaign exists.",
-            "If you came here from a plain status command, use this dashboard for the UI buttons."
+            "Client dashboard",
+            "Primary flow: create or activate a campaign, upload a file, then let the system process and send automatically.",
+            "The queue and status buttons are for checking progress; they are not required for normal use.",
+            "If you only want the simple flow, use Campaign Create, Ingest Data, and Queue/Status."
           ].join("\n"),
           components: createDashboardComponents()
         });
@@ -928,26 +985,24 @@ export const startDiscordBot = async (): Promise<void> => {
             : null;
 
           await commandInteraction.editReply(truncate([
-            `Job ${job.id}`,
-            `Type: ${job.type}`,
-            `Status: ${job.status}`,
+            formatJobStatusSummary(job),
+            resultCounts ? `Records: raw=${resultCounts.raw ?? 0}, valid=${resultCounts.valid ?? 0}, duplicate=${resultCounts.duplicate ?? 0}, error=${resultCounts.error ?? 0}` : null,
             `Created: ${job.createdAt}`,
-            `Updated: ${job.updatedAt}`,
-            `Progress: ${job.progress.processed}/${job.progress.total} processed, ${job.progress.failed} failed`,
-            resultCounts ? `Counts: raw=${resultCounts.raw ?? 0}, valid=${resultCounts.valid ?? 0}, duplicate=${resultCounts.duplicate ?? 0}, error=${resultCounts.error ?? 0}` : null,
-            job.payload?.datasetId ? `Dataset: ${String(job.payload.datasetId)}` : null,
-            job.payload?.campaignId ? `Campaign: ${String(job.payload.campaignId)}` : null,
-            job.error ? `Error: ${job.error}` : null
+            `Updated: ${job.updatedAt}`
           ].filter(Boolean).join("\n")));
           return;
         }
 
         const summary = jobStore.getSummary();
         await commandInteraction.editReply(truncate([
-          formatCountBlock("Job summary", summary.counts),
+          "Current pipeline",
+          `Waiting: ${summary.counts.pending ?? 0}`,
+          `Working: ${summary.counts.processing ?? 0}`,
+          `Done: ${summary.counts.completed ?? 0}`,
+          `Failed: ${summary.counts.failed ?? 0}`,
           "",
-          "Recent jobs:",
-          ...summary.recent.slice(0, 10).map((job) => `- ${job.id} ${job.type} [${job.status}] processed=${job.progress.processed}/${job.progress.total} failed=${job.progress.failed}`)
+          "Recent activity:",
+          ...summary.recent.slice(0, 5).map((job) => `- ${job.type} ${job.status} (${job.progress.processed}/${job.progress.total})`)
         ].join("\n")));
         return;
       }
