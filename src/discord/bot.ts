@@ -38,6 +38,11 @@ const dashboardButtonIds = {
   queue: "dashboard:queue",
   send: "dashboard:send",
   logs: "dashboard:logs",
+  smtpList: "dashboard:smtp-list",
+  smtpCreate: "dashboard:smtp-create",
+  smtpUpdate: "dashboard:smtp-update",
+  smtpFailures: "dashboard:smtp-failures",
+  smtpUsage: "dashboard:smtp-usage",
   accounts: "dashboard:accounts",
   health: "dashboard:health",
   status: "dashboard:status",
@@ -59,6 +64,8 @@ const dashboardButtonIds = {
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
 const campaignUpdateModalId = "dashboard:campaign-update-modal";
+const smtpCreateModalId = "dashboard:smtp-create-modal";
+const smtpUpdateModalId = "dashboard:smtp-update-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
 const emailCreateModalId = "dashboard:email-create-modal";
@@ -117,31 +124,38 @@ const postDashboardPanel = async (client: Client): Promise<void> => {
 const createDashboardComponents = () => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.ingest).setLabel("Ingest Data").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("View Queue").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaigns).setLabel("Campaigns").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.send).setLabel("Start Sending").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.accounts).setLabel("Accounts").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.logs).setLabel("Logs").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.status).setLabel("Status").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(dashboardButtonIds.health).setLabel("Health").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.status).setLabel("Status").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.window).setLabel("Window").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaigns).setLabel("Campaigns").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.storage).setLabel("Storage").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUpdate).setLabel("SMTP Update").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpFailures).setLabel("SMTP Failures").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUsage).setLabel("SMTP Usage").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelList).setLabel("cPanel List").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelCreate).setLabel("cPanel Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainList).setLabel("Subdomain List").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.emailList).setLabel("Email List").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.pause).setLabel("Pause").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.resume).setLabel("Resume").setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainCreate).setLabel("Subdomain Create").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.emailList).setLabel("Email List").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(dashboardButtonIds.emailCreate).setLabel("Email Create").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.health).setLabel("Health").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.window).setLabel("Window").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.logs).setLabel("Logs").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.storage).setLabel("Storage").setStyle(ButtonStyle.Secondary)
+  ),
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(dashboardButtonIds.pause).setLabel("Pause").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.resume).setLabel("Resume").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.accounts).setLabel("Accounts").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Campaign Update").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelCreate).setLabel("cPanel Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainCreate).setLabel("Subdomain Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.emailCreate).setLabel("Email Create").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Campaign Update").setStyle(ButtonStyle.Secondary)
   )
 ];
 
@@ -224,6 +238,77 @@ const createCampaignModal = (mode: "create" | "update") => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(status)
     );
 };
+
+  const createSmtpModal = (mode: "create" | "update") => {
+    const id = new TextInputBuilder()
+      .setCustomId("id")
+      .setLabel(mode === "update" ? "SMTP account id (required for update)" : "SMTP account id (optional)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(mode === "update");
+
+    const emailAccountId = new TextInputBuilder()
+      .setCustomId("email_account_id")
+      .setLabel("Email account id")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(mode === "create");
+
+    const host = new TextInputBuilder()
+      .setCustomId("host")
+      .setLabel("SMTP host")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(mode === "create");
+
+    const username = new TextInputBuilder()
+      .setCustomId("username")
+      .setLabel("SMTP username")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(mode === "create");
+
+    const password = new TextInputBuilder()
+      .setCustomId("password")
+      .setLabel("SMTP password or app password")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(mode === "create");
+
+    const port = new TextInputBuilder()
+      .setCustomId("port")
+      .setLabel("Port (default 587)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
+
+    const useTls = new TextInputBuilder()
+      .setCustomId("use_tls")
+      .setLabel("Use TLS (true/false)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
+
+    const maxPerWindow = new TextInputBuilder()
+      .setCustomId("max_per_window")
+      .setLabel("Max per window")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
+
+    const maxConcurrent = new TextInputBuilder()
+      .setCustomId("max_concurrent")
+      .setLabel("Max concurrent")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
+
+    return new ModalBuilder()
+      .setCustomId(mode === "create" ? smtpCreateModalId : smtpUpdateModalId)
+      .setTitle(mode === "create" ? "Create SMTP Account" : "Update SMTP Account")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(id),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(host),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(username),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(password),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(port),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(useTls),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(maxPerWindow),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(maxConcurrent)
+      );
+  };
 
 const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
   if (mode === "cpanel") {
@@ -667,6 +752,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.queue) {
+          await interaction.deferReply({ ephemeral: true });
           const status = await getQueueStatus();
           if (config.databaseUrl) {
             const pool = getDatabasePool();
@@ -681,26 +767,24 @@ export const startDiscordBot = async (): Promise<void> => {
                 }
               : null;
 
-            await interaction.reply({ content: truncate(formatQueueSummary({ ...status, latestFailedSendingJob })), ephemeral: true });
+            await interaction.editReply(truncate(formatQueueSummary({ ...status, latestFailedSendingJob })));
             return;
           }
 
-          await interaction.reply({ content: truncate(formatQueueSummary(status)), ephemeral: true });
+          await interaction.editReply(truncate(formatQueueSummary(status)));
           return;
         }
 
         if (interaction.customId === dashboardButtonIds.accounts) {
+          await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
-            await interaction.reply({ content: "db_required", ephemeral: true });
+            await interaction.editReply("db_required");
             return;
           }
 
           const repo = new SmtpRepository();
           const accounts = await repo.listActiveAccounts();
-          await interaction.reply({
-            content: truncate(accounts.length === 0 ? "no_accounts" : accounts.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`).join("\n")),
-            ephemeral: true
-          });
+          await interaction.editReply(truncate(accounts.length === 0 ? "no_accounts" : accounts.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`).join("\n")));
           return;
         }
 
@@ -710,40 +794,84 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.status) {
+          await interaction.deferReply({ ephemeral: true });
           const summary = jobStore.getSummary();
-          await interaction.reply({
-            content: truncate([
-              formatCountBlock("Job summary", summary.counts),
-              "",
-              "Recent jobs:",
-              ...summary.recent.slice(0, 10).map((job) => `- ${job.id} ${job.type} [${job.status}] processed=${job.progress.processed}/${job.progress.total} failed=${job.progress.failed}`)
-            ].join("\n")),
-            ephemeral: true
-          });
+          await interaction.editReply(truncate([
+            "Current pipeline",
+            `Waiting: ${summary.counts.pending ?? 0}`,
+            `Working: ${summary.counts.processing ?? 0}`,
+            `Done: ${summary.counts.completed ?? 0}`,
+            `Failed: ${summary.counts.failed ?? 0}`,
+            "",
+            "Recent activity:",
+            ...summary.recent.slice(0, 5).map((job) => `- ${job.type} ${job.status} (${job.progress.processed}/${job.progress.total})`)
+          ].join("\n")));
           return;
         }
 
         if (interaction.customId === dashboardButtonIds.window) {
+          await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
-            await interaction.reply({ content: "db_required", ephemeral: true });
+            await interaction.editReply("db_required");
             return;
           }
 
           const repo = new WindowSettingsRepository();
           const settings = await repo.getSettings();
-          await interaction.reply({ content: truncate(formatWindowSettings(settings)), ephemeral: true });
+          await interaction.editReply(truncate(formatWindowSettings(settings)));
           return;
         }
 
         if (interaction.customId === dashboardButtonIds.campaigns) {
+          await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
-            await interaction.reply({ content: "db_required", ephemeral: true });
+            await interaction.editReply("db_required");
             return;
           }
 
           const pool = getDatabasePool();
           const res = await pool.query("SELECT id, name, subject, status FROM campaigns ORDER BY created_at DESC LIMIT 10");
-          await interaction.reply({ content: truncate(formatCampaignRows(res.rows as Array<{ id: string; name: string; subject: string; status: string }>)), ephemeral: true });
+          await interaction.editReply(truncate(formatCampaignRows(res.rows as Array<{ id: string; name: string; subject: string; status: string }>)));
+          return;
+        }
+
+        if (interaction.customId === dashboardButtonIds.smtpList || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
+          await interaction.deferReply({ ephemeral: true });
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const pool = getDatabasePool();
+          if (interaction.customId === dashboardButtonIds.smtpList) {
+            const repo = new SmtpRepository();
+            const list = await repo.listAllAccounts();
+            await interaction.editReply(truncate(formatSmtpRows(list)));
+            return;
+          }
+
+          if (interaction.customId === dashboardButtonIds.smtpFailures) {
+            const res = await pool.query(
+              `SELECT smtp_account_id, consecutive_failures, last_failure_at FROM smtp_failures ORDER BY last_failure_at DESC LIMIT 20`
+            );
+            await interaction.editReply(truncate(formatSmtpFailures(res.rows as Array<{ smtp_account_id: string; consecutive_failures: number; last_failure_at: string | null }>)));
+            return;
+          }
+
+          const res = await pool.query(
+            `SELECT id, window_start, window_end, status FROM sending_windows ORDER BY window_start DESC LIMIT 10`
+          );
+          await interaction.editReply(truncate(formatWindows(res.rows as Array<{ id: string; window_start: string; window_end: string; status: string }>)));
+          return;
+        }
+
+        if (interaction.customId === dashboardButtonIds.smtpCreate) {
+          await interaction.showModal(createSmtpModal("create"));
+          return;
+        }
+
+        if (interaction.customId === dashboardButtonIds.smtpUpdate) {
+          await interaction.showModal(createSmtpModal("update"));
           return;
         }
 
@@ -909,6 +1037,89 @@ export const startDiscordBot = async (): Promise<void> => {
           const address = interaction.fields.getTextInputValue("address").trim();
           const id = await createHierarchyRecord("email", { subdomain_id: subdomainId, address });
           await interaction.editReply(id === "db_required" ? id : `created email account ${id}`);
+          return;
+        }
+
+        if (interaction.customId === smtpCreateModalId || interaction.customId === smtpUpdateModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const repo = new SmtpRepository();
+          const id = interaction.fields.getTextInputValue("id").trim();
+          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim();
+          const host = interaction.fields.getTextInputValue("host").trim();
+          const username = interaction.fields.getTextInputValue("username").trim();
+          const password = interaction.fields.getTextInputValue("password").trim();
+          const portText = interaction.fields.getTextInputValue("port").trim();
+          const useTlsText = interaction.fields.getTextInputValue("use_tls").trim().toLowerCase();
+          const maxPerWindowText = interaction.fields.getTextInputValue("max_per_window").trim();
+          const maxConcurrentText = interaction.fields.getTextInputValue("max_concurrent").trim();
+
+          const parseNumber = (value: string): number | undefined => {
+            if (!value) return undefined;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : undefined;
+          };
+
+          const useTls = useTlsText ? useTlsText === "true" : undefined;
+          const port = parseNumber(portText);
+          const maxPerWindow = parseNumber(maxPerWindowText);
+          const maxConcurrent = parseNumber(maxConcurrentText);
+
+          if (interaction.customId === smtpCreateModalId) {
+            if (!emailAccountId || !host || !username || !password) {
+              await interaction.editReply("missing_required_smtp_fields");
+              return;
+            }
+
+            const createdId = await repo.createSmtpAccount({
+              emailAccountId,
+              host,
+              port: port ?? 587,
+              username,
+              passwordEncrypted: encrypt(password),
+              useTls,
+              maxPerWindow,
+              maxConcurrent
+            });
+
+            await interaction.editReply(`created smtp account ${createdId}. Use SMTP List to verify it.`);
+            return;
+          }
+
+          if (!id) {
+            await interaction.editReply("smtp_account_id_required_for_update");
+            return;
+          }
+
+          const patch: {
+            host?: string;
+            port?: number;
+            username?: string;
+            passwordEncrypted?: string;
+            useTls?: boolean;
+            maxPerWindow?: number;
+            maxConcurrent?: number;
+          } = {};
+
+          if (host) patch.host = host;
+          if (typeof port === "number") patch.port = port;
+          if (username) patch.username = username;
+          if (password) patch.passwordEncrypted = encrypt(password);
+          if (typeof useTls === "boolean") patch.useTls = useTls;
+          if (typeof maxPerWindow === "number") patch.maxPerWindow = maxPerWindow;
+          if (typeof maxConcurrent === "number") patch.maxConcurrent = maxConcurrent;
+
+          if (Object.keys(patch).length === 0) {
+            await interaction.editReply("no_fields_to_update");
+            return;
+          }
+
+          await repo.updateSmtpAccount(id, patch);
+          await interaction.editReply(`updated smtp account ${id}`);
           return;
         }
 
