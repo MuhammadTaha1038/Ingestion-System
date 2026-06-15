@@ -63,7 +63,9 @@ const dashboardButtonIds = {
 
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
+const campaignUpdatePromptModalId = "dashboard:campaign-update-prompt-modal";
 const campaignUpdateModalId = "dashboard:campaign-update-modal";
+const campaignUpdateOpenButtonId = "dashboard:campaign-update-open";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
@@ -190,36 +192,73 @@ const createIngestModal = () => {
     );
 };
 
-const createCampaignModal = (mode: "create" | "update") => {
+const createCampaignModal = (
+  mode: "create" | "update",
+  campaign?: {
+    id: string;
+    name: string;
+    status: string;
+    subject: string;
+    body_html: string;
+    from_address: string;
+    reply_to: string | null;
+  }
+) => {
   const campaignId = new TextInputBuilder()
     .setCustomId("campaign_id")
-    .setLabel("Campaign ID (required for update)")
+    .setLabel("Campaign ID")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "update");
+    .setRequired(mode === "update")
+    .setValue(mode === "update" && campaign ? campaign.id : "")
+    .setPlaceholder(mode === "update" ? "Enter campaign id to update" : "Optional campaign id");
 
   const name = new TextInputBuilder()
     .setCustomId("name")
     .setLabel("Campaign name")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "create");
+    .setRequired(true)
+    .setValue(campaign?.name ?? "")
+    .setPlaceholder("Descriptive campaign name");
+
+  const status = new TextInputBuilder()
+    .setCustomId("status")
+    .setLabel("Status")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.status ?? "draft")
+    .setPlaceholder("draft, active, paused, archived");
 
   const subject = new TextInputBuilder()
     .setCustomId("subject")
     .setLabel("Email subject")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "create");
+    .setRequired(true)
+    .setValue(campaign?.subject ?? "")
+    .setPlaceholder("The email subject line");
 
   const bodyHtml = new TextInputBuilder()
     .setCustomId("body_html")
     .setLabel("HTML body")
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(mode === "create");
+    .setRequired(true)
+    .setValue(campaign?.body_html ?? "")
+    .setPlaceholder("HTML email body content");
 
   const fromAddress = new TextInputBuilder()
     .setCustomId("from_address")
     .setLabel("From address")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "create");
+    .setRequired(true)
+    .setValue(campaign?.from_address ?? "")
+    .setPlaceholder("sender@example.com");
+
+  const replyTo = new TextInputBuilder()
+    .setCustomId("reply_to")
+    .setLabel("Reply-To address")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.reply_to ?? "")
+    .setPlaceholder("Optional reply-to email");
 
   return new ModalBuilder()
     .setCustomId(mode === "create" ? campaignCreateModalId : campaignUpdateModalId)
@@ -227,9 +266,11 @@ const createCampaignModal = (mode: "create" | "update") => {
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(status),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo)
     );
 };
 
@@ -313,6 +354,20 @@ const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
         new TextInputBuilder().setCustomId("address").setLabel("Email address").setStyle(TextInputStyle.Short).setRequired(true)
       )
     );
+};
+
+const createCampaignUpdateLookupModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Enter the campaign id to load");
+
+  return new ModalBuilder()
+    .setCustomId(campaignUpdatePromptModalId)
+    .setTitle("Load Campaign for Update")
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId));
 };
 
 const queueDashboardIngestion = async (args: {
@@ -946,7 +1001,29 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-          await interaction.showModal(createCampaignModal("update"));
+          await interaction.showModal(createCampaignUpdateLookupModal());
+          return;
+        }
+
+        if (interaction.customId.startsWith(campaignUpdateOpenButtonId)) {
+          const campaignId = interaction.customId.slice(campaignUpdateOpenButtonId.length + 1);
+          if (!campaignId) {
+            await interaction.reply({ content: "campaign_id_required_for_update", ephemeral: true });
+            return;
+          }
+
+          if (!config.databaseUrl) {
+            await interaction.reply({ content: "db_required", ephemeral: true });
+            return;
+          }
+
+          const campaign = await selectCampaignById(campaignId);
+          if (!campaign) {
+            await interaction.reply({ content: "campaign_not_found", ephemeral: true });
+            return;
+          }
+
+          await interaction.showModal(createCampaignModal("update", campaign));
           return;
         }
 
@@ -1079,6 +1156,39 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
+        if (interaction.customId === campaignUpdatePromptModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
+          if (!campaignId) {
+            await interaction.editReply("campaign_id_required_for_update");
+            return;
+          }
+
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const campaign = await selectCampaignById(campaignId);
+          if (!campaign) {
+            await interaction.editReply("campaign_not_found");
+            return;
+          }
+
+          await interaction.editReply({
+            content: `Campaign ${campaignId} loaded. Click the button below to open the update form.`,
+            components: [
+              new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`${campaignUpdateOpenButtonId}:${campaignId}`)
+                  .setLabel("Edit campaign")
+                  .setStyle(ButtonStyle.Primary)
+              )
+            ]
+          });
+          return;
+        }
+
         if (interaction.customId === campaignCreateModalId || interaction.customId === campaignUpdateModalId) {
           await interaction.deferReply({ ephemeral: true });
           const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
@@ -1086,6 +1196,8 @@ export const startDiscordBot = async (): Promise<void> => {
           const subject = interaction.fields.getTextInputValue("subject").trim();
           const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
           const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
+          const replyTo = interaction.fields.getTextInputValue("reply_to").trim();
+          const status = interaction.fields.getTextInputValue("status").trim();
 
           if (interaction.customId === campaignUpdateModalId && !campaignId) {
             await interaction.editReply("campaign_id_required_for_update");
@@ -1097,7 +1209,9 @@ export const startDiscordBot = async (): Promise<void> => {
             name,
             subject,
             bodyHtml,
-            fromAddress
+            fromAddress,
+            replyTo: replyTo || null,
+            status: status || null
           });
           await interaction.editReply(message);
           return;

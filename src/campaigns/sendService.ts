@@ -7,6 +7,8 @@ import { jobStore } from "../jobs/store.js";
 
 export interface CampaignSendDefinition {
   id: string;
+  name: string;
+  status: string;
   subject: string;
   body_html: string;
   body_text: string | null;
@@ -32,7 +34,7 @@ export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefin
 export const selectCampaignById = async (campaignId: string, pool?: Pool): Promise<CampaignSendDefinition | null> => {
   const database = getPool(pool);
   const res = await database.query(
-    `SELECT id, subject, body_html, body_text, from_address, reply_to
+    `SELECT id, name, status, subject, body_html, body_text, from_address, reply_to
      FROM campaigns
      WHERE id = $1 AND status IN ('active','draft') LIMIT 1`,
     [campaignId]
