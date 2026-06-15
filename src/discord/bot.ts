@@ -1209,16 +1209,15 @@ export const startDiscordBot = async (): Promise<void> => {
 
       if (interaction.isModalSubmit()) {
         if (interaction.customId === campaignUpdateLookupModalId) {
-          await interaction.deferReply({ ephemeral: true });
           const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
           if (!config.databaseUrl) {
-            await interaction.editReply("db_required");
+            await interaction.reply({ content: "db_required", ephemeral: true });
             return;
           }
 
           const campaign = await selectCampaignById(campaignId);
           if (!campaign) {
-            await interaction.editReply("campaign_not_found");
+            await interaction.reply({ content: "campaign_not_found", ephemeral: true });
             return;
           }
 
