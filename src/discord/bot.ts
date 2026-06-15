@@ -64,7 +64,7 @@ const dashboardButtonIds = {
 
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
-const campaignUpdateSelectId = "dashboard:campaign-update-select";
+const campaignUpdateLookupModalId = "dashboard:campaign-update-lookup-modal";
 const campaignUpdateModalId = "dashboard:campaign-update-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
@@ -208,7 +208,7 @@ const createCampaignModal = (
     .setCustomId("campaign_id")
     .setLabel("Campaign ID")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
+    .setRequired(mode === "update")
     .setValue(mode === "update" && campaign ? campaign.id : "")
     .setPlaceholder(mode === "update" ? "Enter campaign id to update" : "Optional campaign id");
 
@@ -219,14 +219,6 @@ const createCampaignModal = (
     .setRequired(true)
     .setValue(campaign?.name ?? "")
     .setPlaceholder("Descriptive campaign name");
-
-  const status = new TextInputBuilder()
-    .setCustomId("status")
-    .setLabel("Status")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.status ?? "draft")
-    .setPlaceholder("draft, active, paused, archived");
 
   const subject = new TextInputBuilder()
     .setCustomId("subject")
@@ -252,25 +244,15 @@ const createCampaignModal = (
     .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
 
-  const replyTo = new TextInputBuilder()
-    .setCustomId("reply_to")
-    .setLabel("Reply-To address")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.reply_to ?? "")
-    .setPlaceholder("Optional reply-to email");
-
   return new ModalBuilder()
     .setCustomId(mode === "create" ? campaignCreateModalId : campaignUpdateModalId)
     .setTitle(mode === "create" ? "Create Campaign" : "Update Campaign")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(status),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
     );
 };
 
@@ -316,6 +298,20 @@ const createCampaignModal = (
         )
       );
   };
+
+const createCampaignUpdateLookupModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Enter the campaign id to load");
+
+  return new ModalBuilder()
+    .setCustomId(campaignUpdateLookupModalId)
+    .setTitle("Load Campaign for Update")
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId));
+};
 
 const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
   if (mode === "cpanel") {
@@ -1089,38 +1085,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-          await interaction.deferReply({ ephemeral: true });
-          if (!config.databaseUrl) {
-            await interaction.editReply("db_required");
-            return;
-          }
-
-          const pool = getDatabasePool();
-          const res = await pool.query("SELECT id, name, status, subject FROM campaigns ORDER BY created_at DESC LIMIT 25");
-          const campaigns = res.rows as Array<{ id: string; name: string; status: string; subject: string }>;
-
-          if (campaigns.length === 0) {
-            await interaction.editReply("no_campaigns");
-            return;
-          }
-
-          await interaction.editReply({
-            content: "Select a campaign to update.",
-            components: [
-              new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-                new StringSelectMenuBuilder()
-                  .setCustomId(campaignUpdateSelectId)
-                  .setPlaceholder("Choose a campaign to edit")
-                  .addOptions(
-                    campaigns.map((campaign) => ({
-                      label: `${campaign.name} (${campaign.status})`,
-                      description: campaign.subject.slice(0, 50),
-                      value: campaign.id
-                    }))
-                  )
-              )
-            ]
-          });
+          await interaction.showModal(createCampaignUpdateLookupModal());
           return;
         }
 
@@ -1242,11 +1207,10 @@ export const startDiscordBot = async (): Promise<void> => {
         }
       }
 
-      if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === campaignUpdateSelectId) {
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId === campaignUpdateLookupModalId) {
           await interaction.deferReply({ ephemeral: true });
-          const campaignId = interaction.values[0];
-
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
           if (!config.databaseUrl) {
             await interaction.editReply("db_required");
             return;
@@ -1258,12 +1222,16 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          await interaction.showModal(createCampaignModal("update", campaign));
+          const castInteraction = interaction as unknown as { showModal?: (modal: any) => Promise<unknown> };
+          if (typeof castInteraction.showModal === "function") {
+            await castInteraction.showModal(createCampaignModal("update", campaign));
+            return;
+          }
+
+          await interaction.reply({ content: "Unable to open update form directly. Please try again or use /campaign-update.", ephemeral: true });
           return;
         }
-      }
 
-      if (interaction.isModalSubmit()) {
         if (interaction.customId === ingestModalId) {
           await interaction.deferReply({ ephemeral: true });
           const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
