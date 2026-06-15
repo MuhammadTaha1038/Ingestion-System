@@ -6,6 +6,7 @@ import {
   ChatInputCommandInteraction,
   Client,
   GatewayIntentBits,
+  StringSelectMenuBuilder,
   TextChannel,
   ModalBuilder,
   Partials,
@@ -63,9 +64,8 @@ const dashboardButtonIds = {
 
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
-const campaignUpdatePromptModalId = "dashboard:campaign-update-prompt-modal";
+const campaignUpdateSelectId = "dashboard:campaign-update-select";
 const campaignUpdateModalId = "dashboard:campaign-update-modal";
-const campaignUpdateOpenButtonId = "dashboard:campaign-update-open";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
@@ -208,7 +208,7 @@ const createCampaignModal = (
     .setCustomId("campaign_id")
     .setLabel("Campaign ID")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "update")
+    .setRequired(true)
     .setValue(mode === "update" && campaign ? campaign.id : "")
     .setPlaceholder(mode === "update" ? "Enter campaign id to update" : "Optional campaign id");
 
@@ -354,20 +354,6 @@ const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
         new TextInputBuilder().setCustomId("address").setLabel("Email address").setStyle(TextInputStyle.Short).setRequired(true)
       )
     );
-};
-
-const createCampaignUpdateLookupModal = () => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("Enter the campaign id to load");
-
-  return new ModalBuilder()
-    .setCustomId(campaignUpdatePromptModalId)
-    .setTitle("Load Campaign for Update")
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId));
 };
 
 const queueDashboardIngestion = async (args: {
@@ -546,6 +532,93 @@ const createHierarchyRecord = async (mode: "cpanel" | "subdomain" | "email", val
 const truncate = (value: string, max = 1800): string =>
   value.length > max ? `${value.slice(0, max)}…` : value;
 
+type PersistentJobSummary = {
+  statusCounts: Record<string, number>;
+  recentJobs: Array<{
+    id: string;
+    type: string;
+    status: string;
+    dataset_id: string | null;
+    campaign_id: string | null;
+    total_count: number;
+    processed_count: number;
+    error: string | null;
+    created_at: string;
+  }>;
+  latestDataset: {
+    id: string;
+    source_path: string;
+    status: string;
+    raw_count: number;
+    valid_count: number;
+    duplicate_count: number;
+    error_count: number;
+    created_at: string;
+  } | null;
+};
+
+const getPersistentJobSummary = async (): Promise<PersistentJobSummary> => {
+  const pool = getDatabasePool();
+  const countsRes = await pool.query(`SELECT status, count(*)::int AS count FROM jobs GROUP BY status`);
+  const counts: Record<string, number> = {
+    pending: 0,
+    processing: 0,
+    completed: 0,
+    failed: 0
+  };
+  for (const row of countsRes.rows as Array<{ status: string; count: number }>) {
+    if (typeof counts[row.status] === "number") {
+      counts[row.status] = row.count;
+    }
+  }
+
+  const recentRes = await pool.query(
+    `SELECT id, type, status, dataset_id, campaign_id, total_count, processed_count, error, created_at
+     FROM jobs ORDER BY created_at DESC LIMIT 5`
+  );
+
+  const latestDatasetRes = await pool.query(
+    `SELECT id, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+     FROM datasets ORDER BY created_at DESC LIMIT 1`
+  );
+
+  return {
+    statusCounts: counts,
+    recentJobs: recentRes.rows as PersistentJobSummary["recentJobs"],
+    latestDataset: latestDatasetRes.rows[0] ?? null
+  };
+};
+
+const formatPersistentJobSummary = (summary: PersistentJobSummary): string => {
+  const lines: string[] = [
+    "Persistent job history",
+    `DB jobs: pending=${summary.statusCounts.pending} processing=${summary.statusCounts.processing} completed=${summary.statusCounts.completed} failed=${summary.statusCounts.failed}`
+  ];
+
+  if (summary.latestDataset) {
+    lines.push(
+      `Latest ingested file: ${summary.latestDataset.source_path}`,
+      `Dataset status: ${summary.latestDataset.status}`,
+      `Counts: fetched=${summary.latestDataset.raw_count} valid=${summary.latestDataset.valid_count} duplicates=${summary.latestDataset.duplicate_count} errors=${summary.latestDataset.error_count}`
+    );
+  }
+
+  lines.push("Recent persisted jobs:");
+  if (summary.recentJobs.length === 0) {
+    lines.push("- No persisted jobs recorded yet.");
+  } else {
+    lines.push(
+      ...summary.recentJobs.map((job) => {
+        const refs = [job.dataset_id ? `dataset ${job.dataset_id}` : null, job.campaign_id ? `campaign ${job.campaign_id}` : null].filter(Boolean);
+        const counts = [job.total_count !== 0 ? `total=${job.total_count}` : null, job.processed_count !== 0 ? `processed=${job.processed_count}` : null].filter(Boolean);
+        return `- ${job.type} ${job.status}: ${job.id}${refs.length ? ` (${refs.join(" | ")})` : ""}${counts.length ? ` ${counts.join(" ")}` : ""}${job.error ? ` error=${job.error}` : ""}`;
+      })
+    );
+  }
+
+  return lines.join("\n");
+};
+
 const formatCampaignRows = (rows: Array<{ id: string; name: string; subject: string; status: string }>): string => {
   if (rows.length === 0) return "no_campaigns";
   return rows.slice(0, 10).map((row) => `${row.id} ${row.name} [${row.status}] ${row.subject}`).join("\n");
@@ -680,7 +753,7 @@ const formatQueueSummary = (status: {
   liveJobs?: Array<{ id: string; type: string; status: string; progress: { processed: number; total: number }; payload?: Record<string, unknown>; error?: string }>;
   latestIngestionJob?: { id: string; status: string; payload?: Record<string, unknown>; error?: string | null } | null;
   latestSendingJob?: { id: string; status: string; payload?: Record<string, unknown>; error?: string | null } | null;
-}): string => {
+}, persistentSummary?: string): string => {
   return [
     "Pipeline",
     `Ingestion: ${status.paused.ingestion ? "paused" : status.ingestion.waiting + status.ingestion.active > 0 ? "working" : "ready"}`,
@@ -865,6 +938,7 @@ export const startDiscordBot = async (): Promise<void> => {
           const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
 
           let latestFailedSendingJob: { id: string; error: string | null; finishedAt: string | null } | null = null;
+          let persistentSummary: string | undefined;
           if (config.databaseUrl) {
             const pool = getDatabasePool();
             const failedRes = await pool.query(
@@ -877,9 +951,12 @@ export const startDiscordBot = async (): Promise<void> => {
                   finishedAt: failedRes.rows[0].finished_at ? String(failedRes.rows[0].finished_at) : null
                 }
               : null;
+
+            const dbSummary = await getPersistentJobSummary();
+            persistentSummary = formatPersistentJobSummary(dbSummary);
           }
 
-          await interaction.editReply(truncate(formatQueueSummary({ ...queueStatus, latestFailedSendingJob, latestIngestionJob, latestSendingJob, liveJobs })));
+          await interaction.editReply(truncate(formatQueueSummary({ ...queueStatus, latestFailedSendingJob, latestIngestionJob, latestSendingJob, liveJobs }, persistentSummary)));
           return;
         }
 
@@ -907,6 +984,13 @@ export const startDiscordBot = async (): Promise<void> => {
           const latestIngestionJob = summary.recent.find((job) => job.type === "ingestion") ?? null;
           const latestSendingJob = summary.recent.find((job) => job.type === "sending") ?? null;
           const liveJobs = summary.recent.filter((job) => job.status === "pending" || job.status === "processing");
+
+          let persistentSummary: string | null = null;
+          if (config.databaseUrl) {
+            const dbSummary = await getPersistentJobSummary();
+            persistentSummary = formatPersistentJobSummary(dbSummary);
+          }
+
           const message = [
             "Current pipeline",
             latestIngestionJob ? formatIngestionJobSummary(latestIngestionJob) : "No ingestion jobs yet.",
@@ -923,9 +1007,13 @@ export const startDiscordBot = async (): Promise<void> => {
             "",
             "Live work",
             ...(liveJobs.length > 0 ? liveJobs.slice(0, 5).map((job) => `- ${formatJobLine(job)}`) : ["- No jobs are currently waiting or running."])
-          ].join("\n");
+          ];
 
-          await interaction.editReply(truncate(message));
+          if (persistentSummary) {
+            message.push("", persistentSummary);
+          }
+
+          await interaction.editReply(truncate(message.join("\n")));
           return;
         }
 
@@ -1001,29 +1089,38 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-          await interaction.showModal(createCampaignUpdateLookupModal());
-          return;
-        }
-
-        if (interaction.customId.startsWith(campaignUpdateOpenButtonId)) {
-          const campaignId = interaction.customId.slice(campaignUpdateOpenButtonId.length + 1);
-          if (!campaignId) {
-            await interaction.reply({ content: "campaign_id_required_for_update", ephemeral: true });
-            return;
-          }
-
+          await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
-            await interaction.reply({ content: "db_required", ephemeral: true });
+            await interaction.editReply("db_required");
             return;
           }
 
-          const campaign = await selectCampaignById(campaignId);
-          if (!campaign) {
-            await interaction.reply({ content: "campaign_not_found", ephemeral: true });
+          const pool = getDatabasePool();
+          const res = await pool.query("SELECT id, name, status, subject FROM campaigns ORDER BY created_at DESC LIMIT 25");
+          const campaigns = res.rows as Array<{ id: string; name: string; status: string; subject: string }>;
+
+          if (campaigns.length === 0) {
+            await interaction.editReply("no_campaigns");
             return;
           }
 
-          await interaction.showModal(createCampaignModal("update", campaign));
+          await interaction.editReply({
+            content: "Select a campaign to update.",
+            components: [
+              new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+                new StringSelectMenuBuilder()
+                  .setCustomId(campaignUpdateSelectId)
+                  .setPlaceholder("Choose a campaign to edit")
+                  .addOptions(
+                    campaigns.map((campaign) => ({
+                      label: `${campaign.name} (${campaign.status})`,
+                      description: campaign.subject.slice(0, 50),
+                      value: campaign.id
+                    }))
+                  )
+              )
+            ]
+          });
           return;
         }
 
@@ -1145,24 +1242,10 @@ export const startDiscordBot = async (): Promise<void> => {
         }
       }
 
-      if (interaction.isModalSubmit()) {
-        if (interaction.customId === ingestModalId) {
+      if (interaction.isStringSelectMenu()) {
+        if (interaction.customId === campaignUpdateSelectId) {
           await interaction.deferReply({ ephemeral: true });
-          const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
-          const format = interaction.fields.getTextInputValue("format").trim().toLowerCase();
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim() || undefined;
-          const message = await queueDashboardIngestion({ format, sourcePath, campaignId });
-          await interaction.editReply(message);
-          return;
-        }
-
-        if (interaction.customId === campaignUpdatePromptModalId) {
-          await interaction.deferReply({ ephemeral: true });
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
-          if (!campaignId) {
-            await interaction.editReply("campaign_id_required_for_update");
-            return;
-          }
+          const campaignId = interaction.values[0];
 
           if (!config.databaseUrl) {
             await interaction.editReply("db_required");
@@ -1175,19 +1258,22 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          await interaction.editReply({
-            content: `Campaign ${campaignId} loaded. Click the button below to open the update form.`,
-            components: [
-              new ActionRowBuilder<ButtonBuilder>().addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`${campaignUpdateOpenButtonId}:${campaignId}`)
-                  .setLabel("Edit campaign")
-                  .setStyle(ButtonStyle.Primary)
-              )
-            ]
-          });
+          await interaction.showModal(createCampaignModal("update", campaign));
           return;
         }
+      }
+
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId === ingestModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
+          const format = interaction.fields.getTextInputValue("format").trim().toLowerCase();
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim() || undefined;
+          const message = await queueDashboardIngestion({ format, sourcePath, campaignId });
+          await interaction.editReply(message);
+          return;
+        }
+
 
         if (interaction.customId === campaignCreateModalId || interaction.customId === campaignUpdateModalId) {
           await interaction.deferReply({ ephemeral: true });
@@ -1210,7 +1296,7 @@ export const startDiscordBot = async (): Promise<void> => {
             subject,
             bodyHtml,
             fromAddress,
-            replyTo: replyTo || null,
+            replyTo: replyTo === "" ? null : replyTo,
             status: status || null
           });
           await interaction.editReply(message);
