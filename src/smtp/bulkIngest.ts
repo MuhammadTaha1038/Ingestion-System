@@ -4,6 +4,10 @@ import { readFile } from "fs/promises";
 import { fileURLToPath } from "url";
 import { loadConfig } from "../config/config.js";
 import { createS3Client, getObjectText, putObjectText, resolveS3Location } from "../storage/s3.js";
+import { createLogger } from "../logging/logger.js";
+
+const config = loadConfig();
+const logger = createLogger(config.logLevel);
 
 export interface ParsedSmtpAccount {
   host: string;
@@ -18,12 +22,18 @@ export interface ParsedSmtpAccount {
 
 // Very forgiving parser: supports CSV (header) or comma/space-separated lines
 export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
+  logger.info("smtp_parser: starting parse", { contentLength: content.length });
+  
   const lines = content.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  logger.info("smtp_parser: split into lines", { lineCount: lines.length });
+  
   if (lines.length === 0) return [];
 
   // detect header
   const first = lines[0];
   const hasHeader = /host/i.test(first) && /username/i.test(first);
+  logger.info("smtp_parser: header detection", { hasHeader, firstLine: first.substring(0, 100) });
+  
   const rows: string[][] = [];
 
   for (let i = hasHeader ? 1 : 0; i < lines.length; i++) {
@@ -35,8 +45,13 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
     rows.push(cols);
   }
 
+  logger.info("smtp_parser: after column split", { rowCount: rows.length });
+
   const out: ParsedSmtpAccount[] = [];
-  for (const cols of rows) {
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+    const cols = rows[rowIdx];
+    logger.info("smtp_parser: processing row", { rowIdx, colCount: cols.length, cols: cols.slice(0, 3) });
+    
     // Detect format based on first column content
     // Format 1: host:port,username,password,emailAccountId (combined format)
     // Format 2: host,port,username,password,emailAccountId (separate format)
@@ -50,6 +65,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
     // Check if first column is host:port combined
     if (host.includes(":")) {
       const parts = host.split(":").map((s) => s.trim());
+      logger.info("smtp_parser: detected colon in first column", { host, parts });
       if (parts.length === 2 && /^\d+$/.test(parts[1])) {
         // Valid combined format: host:port
         host = parts[0];
@@ -58,8 +74,10 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
         username = cols[1] ?? "";
         password = cols[2] ?? "";
         emailAccountId = cols[3] ?? undefined;
+        logger.info("smtp_parser: parsed combined format", { host, portText, username });
       } else {
         // Invalid format, skip
+        logger.info("smtp_parser: invalid host:port format, skipping", { parts });
         continue;
       }
     } else {
@@ -68,6 +86,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       username = cols[2] ?? "";
       password = cols[3] ?? "";
       emailAccountId = cols[4] ?? undefined;
+      logger.info("smtp_parser: parsed separate format", { host, portText, username });
     }
 
     // Validate and parse port
@@ -77,10 +96,11 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
 
     // Skip if missing required fields
     if (!host || !username) {
+      logger.info("smtp_parser: missing required fields, skipping", { host, username });
       continue;
     }
 
-    out.push({
+    const account: ParsedSmtpAccount = {
       host,
       port: Number.isFinite(port) ? (port as number) : undefined,
       username,
@@ -89,9 +109,13 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       maxPerWindow: Number.isFinite(maxPerWindow) ? (maxPerWindow as number) : undefined,
       maxConcurrent: Number.isFinite(maxConcurrent) ? (maxConcurrent as number) : undefined,
       emailAccountId
-    });
+    };
+    
+    logger.info("smtp_parser: account extracted", { host: account.host, port: account.port, username: account.username });
+    out.push(account);
   }
 
+  logger.info("smtp_parser: parse complete", { totalAccounts: out.length });
   return out;
 };
 
@@ -149,23 +173,33 @@ const fetchTextContent = async (sourcePath: string): Promise<string> => {
 
 export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
   const cfg = loadConfig();
+  logger.info("smtp_ingest: starting", { hasContent: !!args.content, hasSourcePath: !!args.sourcePath });
+  
   let rawContent = args.content?.trim();
   if ((!rawContent || rawContent.length === 0) && args.sourcePath) {
+    logger.info("smtp_ingest: fetching from sourcePath", { sourcePath: args.sourcePath });
     rawContent = await fetchTextContent(args.sourcePath.trim());
+    logger.info("smtp_ingest: fetched content", { contentLength: rawContent?.length });
   }
 
   if (!rawContent || rawContent.trim().length === 0) {
     throw new Error("missing_content_or_source_path");
   }
 
+  logger.info("smtp_ingest: parsing content", { contentLength: rawContent.length, contentPreview: rawContent.substring(0, 100) });
   const parsed = parseSmtpTxt(rawContent);
+  logger.info("smtp_ingest: parsed complete", { accountCount: parsed.length });
+  
   const repo = new SmtpRepository();
   const results: Array<{ id?: string; error?: string; username?: string }> = [];
 
   for (const acc of parsed) {
     try {
       const emailAccountId = acc.emailAccountId ?? args.defaultEmailAccountId;
+      logger.info("smtp_ingest: processing account", { host: acc.host, username: acc.username, hasEmailAccountId: !!emailAccountId });
+      
       if (!emailAccountId) {
+        logger.info("smtp_ingest: missing emailAccountId", { username: acc.username });
         results.push({ error: "missing_email_account_id", username: acc.username });
         continue;
       }
@@ -182,13 +216,16 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
         maxConcurrent: acc.maxConcurrent ?? 1
       });
 
+      logger.info("smtp_ingest: account created", { id, username: acc.username });
       results.push({ id, username: acc.username });
     } catch (err) {
       const message = err instanceof Error ? err.message : "error";
+      logger.error("smtp_ingest: account creation failed", { username: acc.username, error: message });
       results.push({ error: message, username: acc.username });
     }
   }
 
+  logger.info("smtp_ingest: storing raw file to S3");
   // store raw file to S3 when configured
   try {
     const s3cfg = cfg.s3;
@@ -203,10 +240,13 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
 
       const key = `smtp-uploads/${Date.now()}-${Math.random().toString(36).slice(2,8)}.txt`;
       await putObjectText(client, s3cfg.bucket, key, rawContent, "text/plain");
+      logger.info("smtp_ingest: raw file stored", { key });
     }
   } catch (e) {
-    // ignore S3 failures for now
+    logger.warn("smtp_ingest: failed to store raw file to S3", { error: e instanceof Error ? e.message : String(e) });
   }
 
+  logger.info("smtp_ingest: complete", { successCount: results.filter((r) => r.id).length, failCount: results.filter((r) => r.error).length });
   return results;
 };
+
