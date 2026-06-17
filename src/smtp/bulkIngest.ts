@@ -37,31 +37,45 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
 
   const out: ParsedSmtpAccount[] = [];
   for (const cols of rows) {
-    // Handle two formats:
-    // 1. host, port, username, password, maxPerWindow, maxConcurrent, emailAccountId
-    // 2. host:port, username, password, emailAccountId (when host:port combined)
+    // Detect format based on first column content
+    // Format 1: host:port,username,password,emailAccountId (combined format)
+    // Format 2: host,port,username,password,emailAccountId (separate format)
+    
     let host = cols[0] ?? "";
-    let portText = cols[1] ?? "";
-    let username = cols[2] ?? "";
-    let password = cols[3] ?? "";
-    let emailAccountId = cols[4] ?? undefined;
+    let portText: string | undefined;
+    let username = "";
+    let password = "";
+    let emailAccountId: string | undefined;
 
-    // Detect if first column is host:port combined (e.g., smtp.example.com:587)
-    if (host && !portText && host.includes(":")) {
-      const [hostPart, portPart] = host.split(":").map((s) => s.trim());
-      host = hostPart;
-      portText = portPart;
-      // Shift remaining columns if they exist
-      username = cols[1] ?? "";
-      password = cols[2] ?? "";
-      emailAccountId = cols[3] ?? undefined;
+    // Check if first column is host:port combined
+    if (host.includes(":")) {
+      const parts = host.split(":").map((s) => s.trim());
+      if (parts.length === 2 && /^\d+$/.test(parts[1])) {
+        // Valid combined format: host:port
+        host = parts[0];
+        portText = parts[1];
+        // Remaining columns: username, password, emailAccountId
+        username = cols[1] ?? "";
+        password = cols[2] ?? "";
+        emailAccountId = cols[3] ?? undefined;
+      } else {
+        // Invalid format, skip
+        continue;
+      }
+    } else {
+      // Separate format: host,port,username,password,[maxPerWindow],[maxConcurrent],[emailAccountId]
+      portText = cols[1];
+      username = cols[2] ?? "";
+      password = cols[3] ?? "";
+      emailAccountId = cols[4] ?? undefined;
     }
 
+    // Validate and parse port
     const port = portText ? Number(portText) : undefined;
     const maxPerWindow = cols[5] ? Number(cols[5]) : undefined;
     const maxConcurrent = cols[6] ? Number(cols[6]) : undefined;
 
-    // Skip if no valid host or username
+    // Skip if missing required fields
     if (!host || !username) {
       continue;
     }
@@ -104,19 +118,29 @@ const fetchTextContent = async (sourcePath: string): Promise<string> => {
   if (sourcePath.startsWith("s3://") || sourcePath.indexOf("://") === -1) {
     const cfg = loadConfig();
     const s3cfg = cfg.s3;
-    if (!s3cfg || !s3cfg.bucket || !s3cfg.endpoint || !s3cfg.accessKeyId || !s3cfg.secretAccessKey) {
-      throw new Error("s3_not_configured");
+    
+    // For s3:// URLs, bucket is in the path; for implicit paths, need configured bucket
+    let bucket: string | undefined;
+    if (sourcePath.startsWith("s3://")) {
+      const location = resolveS3Location(sourcePath, "");
+      bucket = location.bucket;
+    } else {
+      bucket = s3cfg.bucket;
+    }
+
+    if (!bucket || !s3cfg.endpoint || !s3cfg.accessKeyId || !s3cfg.secretAccessKey) {
+      throw new Error(`s3_not_configured: bucket=${bucket}, endpoint=${!!s3cfg.endpoint}`);
     }
 
     const client = createS3Client({
       endpoint: s3cfg.endpoint,
       region: s3cfg.region,
-      bucket: s3cfg.bucket,
+      bucket,
       accessKeyId: s3cfg.accessKeyId,
       secretAccessKey: s3cfg.secretAccessKey
     } as any);
 
-    const location = resolveS3Location(sourcePath, s3cfg.bucket);
+    const location = resolveS3Location(sourcePath, bucket);
     return getObjectText(client, location.bucket, location.key);
   }
 
