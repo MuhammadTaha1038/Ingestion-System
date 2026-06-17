@@ -67,6 +67,7 @@ const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
+const smtpImportModalId = "dashboard:smtp-import-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
 const emailCreateModalId = "dashboard:email-create-modal";
@@ -187,6 +188,28 @@ const createIngestModal = () => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
       new ActionRowBuilder<TextInputBuilder>().addComponents(format),
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
+    );
+};
+
+const createSmtpImportModal = () => {
+  const sourcePath = new TextInputBuilder()
+    .setCustomId("source_path")
+    .setLabel("Source URL / S3 path / file:// path")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const emailAccountId = new TextInputBuilder()
+    .setCustomId("email_account_id")
+    .setLabel("Default email account id (optional)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false);
+
+  return new ModalBuilder()
+    .setCustomId(smtpImportModalId)
+    .setTitle("SMTP Import")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId)
     );
 };
 
@@ -427,6 +450,40 @@ const queueDashboardIngestion = async (args: {
       : "If an active campaign exists, auto-send will be queued automatically.",
     datasetId ? `Tracking dataset: ${datasetId}` : null
   ].filter(Boolean).join(" ");
+};
+
+const queueDashboardSmtpImport = async (args: {
+  sourcePath: string;
+  defaultEmailAccountId?: string;
+}): Promise<string> => {
+  if (!config.databaseUrl) {
+    return "db_required";
+  }
+
+  if (!args.sourcePath || !args.sourcePath.trim()) {
+    return "missing_content_or_source_path";
+  }
+
+  try {
+    const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
+    const results = await ingestParsedAccounts({
+      sourcePath: args.sourcePath.trim(),
+      defaultEmailAccountId: args.defaultEmailAccountId?.trim() || undefined
+    });
+
+    const successCount = results.filter((r) => r.id).length;
+    const failCount = results.filter((r) => r.error).length;
+
+    return [
+      `Imported ${successCount} SMTP account(s).`,
+      failCount > 0 ? `Failed ${failCount} account(s).` : null,
+      args.defaultEmailAccountId ? `Default emailAccountId: ${args.defaultEmailAccountId}` : null
+    ]
+      .filter(Boolean)
+      .join(" ");
+  } catch (error) {
+    return error instanceof Error ? error.message : "smtp_import_failed";
+  }
 };
 
 const queueCampaignSend = async (campaignId: string, datasetId: string): Promise<string> => {
@@ -1079,10 +1136,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.smtpImport) {
-          await interaction.reply({
-            content: "Use /smtp-import with a TXT file attachment to upload SMTP accounts. The dashboard button is deprecated for file upload.",
-            ephemeral: true
-          });
+          await interaction.showModal(createSmtpImportModal());
           return;
         }
 
@@ -1220,6 +1274,14 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
+        if (interaction.customId === smtpImportModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
+          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim() || undefined;
+          const message = await queueDashboardSmtpImport({ sourcePath, defaultEmailAccountId: emailAccountId });
+          await interaction.editReply(message);
+          return;
+        }
 
         if (interaction.customId === campaignCreateModalId) {
           const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
