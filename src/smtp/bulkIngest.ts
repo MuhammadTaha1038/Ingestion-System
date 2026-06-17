@@ -100,6 +100,16 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       continue;
     }
 
+    // Validate emailAccountId format if provided - must be UUID
+    if (emailAccountId) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(emailAccountId)) {
+        logger.info("smtp_parser: invalid emailAccountId format (not UUID), skipping", { emailAccountId, username });
+        continue;
+      }
+    }
+
+
     const account: ParsedSmtpAccount = {
       host,
       port: Number.isFinite(port) ? (port as number) : undefined,
