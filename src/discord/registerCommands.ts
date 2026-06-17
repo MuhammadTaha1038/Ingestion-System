@@ -64,8 +64,9 @@ export const registerCommands = async (): Promise<void> => {
       { name: "subdomain_id", type: 3, description: "optional subdomain id", required: false }
     ] },
     { name: "smtp-status", description: "Show active SMTP accounts" },
-    { name: "smtp-import", description: "Bulk import SMTP accounts from pasted content", options: [
-      { name: "content", type: 3, description: "Text content of SMTP accounts (CSV or lines)", required: true },
+    { name: "smtp-import", description: "Bulk import SMTP accounts from pasted content or attached TXT file", options: [
+      { name: "content", type: 3, description: "Text content of SMTP accounts (CSV or lines)", required: false },
+      { name: "file", type: 11, description: "Optional attachment containing SMTP TXT data", required: false },
       { name: "email_account_id", type: 3, description: "Default email account id to attach", required: false }
     ] },
     { name: "accounts-status", description: "Show account status" },

@@ -67,7 +67,6 @@ const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
-const smtpImportModalId = "dashboard:smtp-import-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
 const emailCreateModalId = "dashboard:email-create-modal";
@@ -269,30 +268,6 @@ const createCampaignModal = (campaign?: {
       new ActionRowBuilder<TextInputBuilder>().addComponents(status)
     );
 };
-
-  const createSmtpImportModal = () => {
-    const emailAccountId = new TextInputBuilder()
-      .setCustomId("email_account_id")
-      .setLabel("Default email account id")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder("Optional default email account id");
-
-    const content = new TextInputBuilder()
-      .setCustomId("content")
-      .setLabel("SMTP account rows")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true)
-      .setPlaceholder("host,port,username,password,maxPerWindow,maxConcurrent,emailAccountId\n...");
-
-    return new ModalBuilder()
-      .setCustomId(smtpImportModalId)
-      .setTitle("Bulk SMTP Import")
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(content)
-      );
-  };
 
   const createSmtpModal = (mode: "create" | "update") => {
     if (mode === "create") {
@@ -1104,7 +1079,10 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.smtpImport) {
-          await interaction.showModal(createSmtpImportModal());
+          await interaction.reply({
+            content: "Use /smtp-import with a TXT file attachment to upload SMTP accounts. The dashboard button is deprecated for file upload.",
+            ephemeral: true
+          });
           return;
         }
 
@@ -1315,33 +1293,6 @@ export const startDiscordBot = async (): Promise<void> => {
           const address = interaction.fields.getTextInputValue("address").trim();
           const id = await createHierarchyRecord("email", { subdomain_id: subdomainId, address });
           await interaction.editReply(id === "db_required" ? id : `created email account ${id}`);
-          return;
-        }
-
-        if (interaction.customId === smtpImportModalId) {
-          await interaction.deferReply({ ephemeral: true });
-          if (!config.databaseUrl) {
-            await interaction.editReply("db_required");
-            return;
-          }
-
-          const content = interaction.fields.getTextInputValue("content").trim();
-          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim() || undefined;
-
-          if (!content) {
-            await interaction.editReply("missing_import_content");
-            return;
-          }
-
-          try {
-            const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
-            const results = await ingestParsedAccounts(content, emailAccountId);
-            const created = results.filter((r) => r.id).length;
-            const failed = results.filter((r) => r.error).length;
-            await interaction.editReply(`SMTP import finished. Created: ${created}, Failed: ${failed}`);
-          } catch (err) {
-            await interaction.editReply("smtp_import_failed");
-          }
           return;
         }
 
@@ -1785,12 +1736,29 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
-        const content = options.getString("content", true);
+        const content = options.getString("content") ?? "";
+        const attachment = options.getAttachment("file");
         const defaultEmailAccountId = options.getString("email_account_id");
+
+        let fileContent = "";
+        if (attachment?.url) {
+          const response = await fetch(attachment.url);
+          if (!response.ok) {
+            await commandInteraction.editReply("failed_to_fetch_attachment");
+            return;
+          }
+          fileContent = await response.text();
+        }
+
+        const importText = content.trim() || fileContent.trim();
+        if (!importText) {
+          await commandInteraction.editReply("missing_content_or_file");
+          return;
+        }
 
         try {
           const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
-          const results = await ingestParsedAccounts(content, defaultEmailAccountId ?? undefined);
+          const results = await ingestParsedAccounts(importText, defaultEmailAccountId ?? undefined);
           const success = results.filter((r: any) => r.id).length;
           const failed = results.filter((r: any) => r.error).length;
           await commandInteraction.editReply(`imported: ${success}, failed: ${failed}`);
