@@ -28,6 +28,11 @@ async function main(): Promise<void> {
     startWindowResetter();
     logger.info("window resetter started");
   }
+  if (process.env.RUN_SMTP_VALIDATOR !== "false") {
+    const { startSmtpValidator } = await import("./smtp/validator.js");
+    startSmtpValidator();
+    logger.info("smtp validator started");
+  }
   if (process.env.RUN_DISCORD_BOT !== "false") {
     const { startDiscordBot } = await import("./discord/bot.js");
     startDiscordBot();

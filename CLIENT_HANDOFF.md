@@ -11,7 +11,7 @@
 - SMTP sending worker with retries, per-window limits, and failure auto-disable.
 - Metrics and health endpoints for operational visibility.
 
-Campaign sends are dataset-scoped: the send command requires a dataset id so it targets the intended ingest result.
+Campaign sends can now be fully automatic: when a dataset finishes and an active campaign exists, the worker queues sending without requiring a manual dataset id in the normal flow.
 
 ## How it is built
 
@@ -58,6 +58,7 @@ Required environment variables for full smoke test:
 
 Campaign creation accepts `from_address` and optional `reply_to`; those values are used when sending.
 
+- For file ingestion, prefer direct downloadable object URLs or S3 object paths. The pipeline auto-detects supported formats after fetching the file bytes.
 ## Operational notes
 
 - Keep SMTP credentials in `.env`, not in git.

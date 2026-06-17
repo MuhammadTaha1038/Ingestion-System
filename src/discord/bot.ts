@@ -64,8 +64,6 @@ const dashboardButtonIds = {
 
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
-const campaignUpdateLookupModalId = "dashboard:campaign-update-lookup-modal";
-const campaignUpdateModalId = "dashboard:campaign-update-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
@@ -156,8 +154,7 @@ const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.pause).setLabel("Pause").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(dashboardButtonIds.resume).setLabel("Resume").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(dashboardButtonIds.accounts).setLabel("Accounts").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Campaign Update").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary)
   )
 ];
 
@@ -192,31 +189,28 @@ const createIngestModal = () => {
     );
 };
 
-const createCampaignModal = (
-  mode: "create" | "update",
-  campaign?: {
-    id: string;
-    name: string;
-    status: string;
-    subject: string;
-    body_html: string;
-    from_address: string;
-    reply_to: string | null;
-  }
-) => {
+const createCampaignModal = (campaign?: {
+  id: string;
+  name: string;
+  status: string;
+  subject: string;
+  body_html: string;
+  from_address: string;
+  reply_to: string | null;
+}) => {
   const campaignId = new TextInputBuilder()
     .setCustomId("campaign_id")
     .setLabel("Campaign ID")
     .setStyle(TextInputStyle.Short)
-    .setRequired(mode === "update")
-    .setValue(mode === "update" && campaign ? campaign.id : "")
-    .setPlaceholder(mode === "update" ? "Enter campaign id to update" : "Optional campaign id");
+    .setRequired(false)
+    .setValue(campaign?.id ?? "")
+    .setPlaceholder("Optional campaign id to load or update");
 
   const name = new TextInputBuilder()
     .setCustomId("name")
     .setLabel("Campaign name")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
+    .setRequired(false)
     .setValue(campaign?.name ?? "")
     .setPlaceholder("Descriptive campaign name");
 
@@ -224,7 +218,7 @@ const createCampaignModal = (
     .setCustomId("subject")
     .setLabel("Email subject")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
+    .setRequired(false)
     .setValue(campaign?.subject ?? "")
     .setPlaceholder("The email subject line");
 
@@ -232,7 +226,7 @@ const createCampaignModal = (
     .setCustomId("body_html")
     .setLabel("HTML body")
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
+    .setRequired(false)
     .setValue(campaign?.body_html ?? "")
     .setPlaceholder("HTML email body content");
 
@@ -240,19 +234,37 @@ const createCampaignModal = (
     .setCustomId("from_address")
     .setLabel("From address")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
+    .setRequired(false)
     .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
 
+  const replyTo = new TextInputBuilder()
+    .setCustomId("reply_to")
+    .setLabel("Reply-to address")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.reply_to ?? "")
+    .setPlaceholder("reply-to email address (optional)");
+
+  const status = new TextInputBuilder()
+    .setCustomId("status")
+    .setLabel("Campaign status")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.status ?? "")
+    .setPlaceholder("draft, active, paused, archived");
+
   return new ModalBuilder()
-    .setCustomId(mode === "create" ? campaignCreateModalId : campaignUpdateModalId)
-    .setTitle(mode === "create" ? "Create Campaign" : "Update Campaign")
+    .setCustomId(campaignCreateModalId)
+    .setTitle(campaign ? "Update Campaign" : "Create Campaign")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(status)
     );
 };
 
@@ -298,20 +310,6 @@ const createCampaignModal = (
         )
       );
   };
-
-const createCampaignUpdateLookupModal = () => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("Enter the campaign id to load");
-
-  return new ModalBuilder()
-    .setCustomId(campaignUpdateLookupModalId)
-    .setTitle("Load Campaign for Update")
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId));
-};
 
 const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
   if (mode === "cpanel") {
@@ -1080,12 +1078,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.campaignCreate) {
-          await interaction.showModal(createCampaignModal("create"));
-          return;
-        }
-
-        if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-          await interaction.showModal(createCampaignUpdateLookupModal());
+          await interaction.showModal(createCampaignModal());
           return;
         }
 
@@ -1208,29 +1201,6 @@ export const startDiscordBot = async (): Promise<void> => {
       }
 
       if (interaction.isModalSubmit()) {
-        if (interaction.customId === campaignUpdateLookupModalId) {
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
-          if (!config.databaseUrl) {
-            await interaction.reply({ content: "db_required", ephemeral: true });
-            return;
-          }
-
-          const campaign = await selectCampaignById(campaignId);
-          if (!campaign) {
-            await interaction.reply({ content: "campaign_not_found", ephemeral: true });
-            return;
-          }
-
-          const castInteraction = interaction as unknown as { showModal?: (modal: any) => Promise<unknown> };
-          if (typeof castInteraction.showModal === "function") {
-            await castInteraction.showModal(createCampaignModal("update", campaign));
-            return;
-          }
-
-          await interaction.reply({ content: "Unable to open update form directly. Please try again or use /campaign-update.", ephemeral: true });
-          return;
-        }
-
         if (interaction.customId === ingestModalId) {
           await interaction.deferReply({ ephemeral: true });
           const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
@@ -1242,8 +1212,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
 
-        if (interaction.customId === campaignCreateModalId || interaction.customId === campaignUpdateModalId) {
-          await interaction.deferReply({ ephemeral: true });
+        if (interaction.customId === campaignCreateModalId) {
           const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
           const name = interaction.fields.getTextInputValue("name").trim();
           const subject = interaction.fields.getTextInputValue("subject").trim();
@@ -1252,8 +1221,30 @@ export const startDiscordBot = async (): Promise<void> => {
           const replyTo = interaction.fields.getTextInputValue("reply_to").trim();
           const status = interaction.fields.getTextInputValue("status").trim();
 
-          if (interaction.customId === campaignUpdateModalId && !campaignId) {
-            await interaction.editReply("campaign_id_required_for_update");
+          const isLookupOnly = Boolean(campaignId) && !name && !subject && !bodyHtml && !fromAddress && !replyTo && !status;
+          if (isLookupOnly) {
+            if (!config.databaseUrl) {
+              await interaction.reply({ content: "db_required", ephemeral: true });
+              return;
+            }
+            const campaign = await selectCampaignById(campaignId);
+            if (!campaign) {
+              await interaction.reply({ content: "campaign_not_found", ephemeral: true });
+              return;
+            }
+            const castInteraction = interaction as unknown as { showModal?: (modal: any) => Promise<unknown> };
+            if (typeof castInteraction.showModal === "function") {
+              await castInteraction.showModal(createCampaignModal(campaign));
+              return;
+            }
+            await interaction.reply({ content: "Unable to open campaign form directly. Please try again.", ephemeral: true });
+            return;
+          }
+
+          await interaction.deferReply({ ephemeral: true });
+
+          if (!campaignId && (!name || !subject || !bodyHtml || !fromAddress)) {
+            await interaction.editReply("missing_required_campaign_fields");
             return;
           }
 
@@ -1727,6 +1718,28 @@ export const startDiscordBot = async (): Promise<void> => {
         });
 
         await commandInteraction.editReply(`created smtp account ${id}`);
+        return;
+      }
+
+      if (commandName === "smtp-import") {
+        if (!config.databaseUrl) {
+          await commandInteraction.editReply("db_required");
+          return;
+        }
+
+        const content = options.getString("content", true);
+        const defaultEmailAccountId = options.getString("email_account_id");
+
+        try {
+          const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
+          const results = await ingestParsedAccounts(content, defaultEmailAccountId ?? undefined);
+          const success = results.filter((r: any) => r.id).length;
+          const failed = results.filter((r: any) => r.error).length;
+          await commandInteraction.editReply(`imported: ${success}, failed: ${failed}`);
+        } catch (err) {
+          await commandInteraction.editReply("import_failed");
+        }
+
         return;
       }
 

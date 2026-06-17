@@ -334,6 +334,31 @@ export const registerRoutes = (server: FastifyInstance): void => {
     }
   });
 
+  // Bulk import SMTP accounts via uploaded text content
+  server.post("/smtp/import", async (request, reply) => {
+    if (!config.databaseUrl) {
+      reply.send(notReady("db_required"));
+      return;
+    }
+
+    const body = request.body as Record<string, unknown> | undefined;
+    const content = body?.content as string | undefined;
+    const defaultEmailAccountId = body?.emailAccountId as string | undefined;
+
+    if (!content || typeof content !== "string") {
+      reply.code(400).send({ error: "missing_content" });
+      return;
+    }
+
+    try {
+      const { ingestParsedAccounts } = await import("../../smtp/bulkIngest.js");
+      const results = await ingestParsedAccounts(content, defaultEmailAccountId);
+      reply.send(ok({ results }));
+    } catch (err) {
+      reply.code(500).send({ error: "internal_error" });
+    }
+  });
+
   server.get("/smtp/accounts", async (_request, reply) => {
     if (!config.databaseUrl) {
       reply.send(notReady("db_required"));
