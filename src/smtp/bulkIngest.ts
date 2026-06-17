@@ -37,22 +37,44 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
 
   const out: ParsedSmtpAccount[] = [];
   for (const cols of rows) {
-    // common expected orders:
-    // host,port,username,password,maxPerWindow,maxConcurrent,emailAccountId
-    const [host, portText, username, password, maxPerWindowText, maxConcurrentText, emailAccountId] = cols;
+    // Handle two formats:
+    // 1. host, port, username, password, maxPerWindow, maxConcurrent, emailAccountId
+    // 2. host:port, username, password, emailAccountId (when host:port combined)
+    let host = cols[0] ?? "";
+    let portText = cols[1] ?? "";
+    let username = cols[2] ?? "";
+    let password = cols[3] ?? "";
+    let emailAccountId = cols[4] ?? undefined;
+
+    // Detect if first column is host:port combined (e.g., smtp.example.com:587)
+    if (host && !portText && host.includes(":")) {
+      const [hostPart, portPart] = host.split(":").map((s) => s.trim());
+      host = hostPart;
+      portText = portPart;
+      // Shift remaining columns if they exist
+      username = cols[1] ?? "";
+      password = cols[2] ?? "";
+      emailAccountId = cols[3] ?? undefined;
+    }
+
     const port = portText ? Number(portText) : undefined;
-    const maxPerWindow = maxPerWindowText ? Number(maxPerWindowText) : undefined;
-    const maxConcurrent = maxConcurrentText ? Number(maxConcurrentText) : undefined;
+    const maxPerWindow = cols[5] ? Number(cols[5]) : undefined;
+    const maxConcurrent = cols[6] ? Number(cols[6]) : undefined;
+
+    // Skip if no valid host or username
+    if (!host || !username) {
+      continue;
+    }
 
     out.push({
-      host: host,
+      host,
       port: Number.isFinite(port) ? (port as number) : undefined,
-      username: username ?? "",
+      username,
       password: password ?? "",
       useTls: true,
       maxPerWindow: Number.isFinite(maxPerWindow) ? (maxPerWindow as number) : undefined,
       maxConcurrent: Number.isFinite(maxConcurrent) ? (maxConcurrent as number) : undefined,
-      emailAccountId: emailAccountId
+      emailAccountId
     });
   }
 
