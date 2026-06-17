@@ -258,10 +258,33 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
 };
 
 const resolveEmailAccountId = async (reference: string): Promise<string | null> => {
-  const repo = new (await import("../db/repositories/hierarchy.js")).HierarchyRepository();
+  const HierarchyRepository = (await import("../db/repositories/hierarchy.js")).HierarchyRepository;
+  const repo = new HierarchyRepository();
+
   const list = await repo.listEmailAccounts();
   const lower = reference.trim().toLowerCase();
   const match = list.find((row) => row.address.trim().toLowerCase() === lower);
-  return match ? match.id : null;
+  if (match) return match.id;
+
+  // If reference looks like an email address, create an EmailAccount for it
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(reference.trim())) return null;
+
+  logger.info("smtp_ingest: email account reference not found, creating new email account", { reference });
+
+  // Find an existing subdomain to attach to, else create a fallback cPanel/subdomain
+  let subdomains = await repo.listSubdomains();
+  let subdomainId: string | undefined;
+  if (subdomains && subdomains.length > 0) {
+    subdomainId = subdomains[0].id;
+  } else {
+    // create fallback cpanel and subdomain
+    const cpanelId = await repo.createCpanel("imported");
+    subdomainId = await repo.createSubdomain(cpanelId, "imported");
+  }
+
+  const createdId = await repo.createEmailAccount(subdomainId!, reference.trim());
+  logger.info("smtp_ingest: created email account for import", { email: reference, id: createdId });
+  return createdId;
 };
 
