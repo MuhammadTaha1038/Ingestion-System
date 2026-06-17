@@ -41,6 +41,16 @@ export const validateAccount = async (repo: SmtpRepository, accountId: string): 
   }
 };
 
+export const validateAndUpdateAccountStatus = async (repo: SmtpRepository, accountId: string): Promise<{ id: string; ok: boolean; error?: string }> => {
+  const result = await validateAccount(repo, accountId);
+  if (result.ok) {
+    await repo.enableSmtpAccount(accountId);
+  } else {
+    await repo.disableSmtpAccount(accountId);
+  }
+  return result;
+};
+
 export const startSmtpValidator = (): void => {
   const intervalMinutes = Number(process.env.SMTP_VALIDATOR_INTERVAL_MINUTES ?? DEFAULT_INTERVAL_MINUTES);
   const repo = new SmtpRepository();
@@ -52,10 +62,9 @@ export const startSmtpValidator = (): void => {
 
       for (const acc of accounts) {
         try {
-          const res = await validateAccount(repo, acc.id);
+          const res = await validateAndUpdateAccountStatus(repo, acc.id);
           if (!res.ok) {
             logger.warn("smtp-validator: account validation failed, disabling", { id: acc.id, error: res.error });
-            await repo.disableSmtpAccount(acc.id);
           } else {
             logger.info("smtp-validator: account valid", { id: acc.id });
           }

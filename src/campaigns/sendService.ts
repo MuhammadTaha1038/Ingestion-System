@@ -88,7 +88,8 @@ export const enqueueCampaignSendForDataset = async (args: {
         windowId: "",
         fromAddress: args.campaign.from_address,
         replyTo: args.campaign.reply_to ?? undefined,
-        recipients: batch
+        recipients: batch,
+        smtpAccountId: (args.campaign as any).smtp_account_id ?? undefined
       },
       { jobId: sendJobId, removeOnComplete: true }
     );

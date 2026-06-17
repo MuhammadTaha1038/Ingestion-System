@@ -192,4 +192,20 @@ export class SmtpRepository {
   async resetFailureCount(smtpAccountId: string): Promise<void> {
     await this.pool.query(`DELETE FROM smtp_failures WHERE smtp_account_id = $1`, [smtpAccountId]);
   }
+
+  async findByUsernameAndHost(username: string, host: string): Promise<SmtpAccountRecord | null> {
+    const res = await this.pool.query(
+      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts WHERE username = $1 AND host = $2 LIMIT 1`,
+      [username, host]
+    );
+    return res.rows[0] ?? null;
+  }
+
+  async findByUsername(username: string): Promise<SmtpAccountRecord | null> {
+    const res = await this.pool.query(
+      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts WHERE username = $1 ORDER BY created_at DESC LIMIT 1`,
+      [username]
+    );
+    return res.rows[0] ?? null;
+  }
 }

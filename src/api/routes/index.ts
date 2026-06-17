@@ -328,7 +328,9 @@ export const registerRoutes = (server: FastifyInstance): void => {
         maxConcurrent
       });
 
-      reply.code(201).send(ok({ id }));
+      const { validateAndUpdateAccountStatus } = await import("../../smtp/validator.js");
+      const validation = await validateAndUpdateAccountStatus(smtpRepo, id);
+      reply.code(201).send(ok({ id, status: validation.ok ? "active" : "failed", validationError: validation.error }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });
     }
@@ -435,6 +437,15 @@ export const registerRoutes = (server: FastifyInstance): void => {
       }
 
       await smtpRepo.updateSmtpAccount(id, update as any);
+
+      const shouldValidate = ["host", "port", "username", "useTls", "passwordEncrypted"].some((key) => key in update);
+      if (shouldValidate) {
+        const { validateAndUpdateAccountStatus } = await import("../../smtp/validator.js");
+        const validation = await validateAndUpdateAccountStatus(smtpRepo, id);
+        reply.send(ok({ id, status: validation.ok ? "active" : "failed", validationError: validation.error }));
+        return;
+      }
+
       reply.send(ok({ id }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });
@@ -522,6 +533,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const bodyHtml = body?.body_html as string | undefined;
     const fromAddress = body?.from_address as string | undefined;
     const replyTo = body?.reply_to as string | undefined;
+    const smtpAccountEmail = body?.smtp_account_email as string | undefined;
 
     if (!config.databaseUrl) {
       reply.send(notReady("db_required"));
@@ -534,9 +546,36 @@ export const registerRoutes = (server: FastifyInstance): void => {
     }
 
     try {
-      const res = await (await import("../../db/pool.js")).getDatabasePool().query(
-        `INSERT INTO campaigns (name, subject, body_html, from_address, reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-        [name, subject, bodyHtml, fromAddress, replyTo ?? null]
+      let smtpAccountId: string | null = null;
+      if (smtpAccountEmail) {
+        const SmtpRepo = (await import("../../db/repositories/smtp.js")).SmtpRepository;
+        const smtpRepo = new SmtpRepo();
+        const ref = smtpAccountEmail.trim();
+        let found = null as any;
+        if (ref.includes("@")) {
+          const parts = ref.split("@");
+          const username = parts[0];
+          const host = parts.slice(1).join("@");
+          found = await smtpRepo.findByUsernameAndHost(username, host);
+        }
+        if (!found) {
+          found = await smtpRepo.findByUsername(ref);
+        }
+        if (found) smtpAccountId = found.id;
+      }
+
+      const pool = await (await import("../../db/pool.js")).getDatabasePool();
+      const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
+      const createValues: unknown[] = [name, subject, bodyHtml, fromAddress, replyTo ?? null];
+      if (smtpAccountId) {
+        createFields.push("smtp_account_id");
+        createValues.push(smtpAccountId);
+      }
+
+      const placeholders = createValues.map((_, index) => `$${index + 1}`).join(",");
+      const res = await pool.query(
+        `INSERT INTO campaigns (${createFields.join(",")}) VALUES (${placeholders}) RETURNING id`,
+        createValues
       );
       reply.code(201).send(ok({ id: res.rows[0].id }));
     } catch (err) {

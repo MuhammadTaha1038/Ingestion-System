@@ -48,7 +48,25 @@ export const startSendingWorker = (): void => {
         let attempt = 0;
         const maxAttempts = 4; // 1 initial + 3 retries
         const baseDelay = 1000; // 1s
-        const selected = await selectAvailableAccount();
+        // If the job specifies a particular smtpAccountId, use it directly
+        let selected = null as any;
+        const jobLevelSmtp = (job.data as any).smtpAccountId as string | undefined;
+        if (jobLevelSmtp) {
+          // select specific account record with current window id
+          const repo = new (await import("../db/repositories/smtp.js")).SmtpRepository();
+          const accRes = await repo.pool.query(`SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts WHERE id = $1 LIMIT 1`, [jobLevelSmtp]);
+          if (accRes.rows[0] && accRes.rows[0].status === 'active') {
+            // construct a minimal SelectedAccount-like object
+            selected = { account: accRes.rows[0], windowId: null };
+          } else {
+            logger.warn("requested smtp account not available or inactive", { smtpAccountId: jobLevelSmtp });
+            // fall back to auto-selection
+            selected = await selectAvailableAccount();
+          }
+        } else {
+          selected = await selectAvailableAccount();
+        }
+
         if (!selected) {
           logger.warn("no available smtp account, requeueing work");
           throw new Error("no_smtp_available");

@@ -18,4 +18,5 @@ export interface SendingJobPayload {
   fromAddress?: string;
   replyTo?: string;
   recipients?: Array<{ to: string; subject: string; html?: string; text?: string }>;
+  smtpAccountId?: string;
 }

@@ -191,7 +191,9 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
   logger.info("smtp_ingest: parsed complete", { accountCount: parsed.length });
   
   const repo = new SmtpRepository();
-  const results: Array<{ id?: string; error?: string; username?: string }> = [];
+  const results: Array<{ id?: string; error?: string; status?: string; username?: string }> = [];
+
+  const { validateAndUpdateAccountStatus } = await import("./validator.js");
 
   for (const acc of parsed) {
     try {
@@ -223,8 +225,14 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
         maxConcurrent: acc.maxConcurrent ?? 1
       });
 
-      logger.info("smtp_ingest: account created", { id, username: acc.username });
-      results.push({ id, username: acc.username });
+      const validation = await validateAndUpdateAccountStatus(repo, id);
+      if (!validation.ok) {
+        logger.warn("smtp_ingest: account validated but marked inactive", { id, username: acc.username, error: validation.error });
+        results.push({ id, username: acc.username, status: "failed", error: validation.error });
+      } else {
+        logger.info("smtp_ingest: account created and validated", { id, username: acc.username });
+        results.push({ id, username: acc.username, status: "active" });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "error";
       logger.error("smtp_ingest: account creation failed", { username: acc.username, error: message });
