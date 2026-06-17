@@ -42,6 +42,7 @@ const dashboardButtonIds = {
   smtpList: "dashboard:smtp-list",
   smtpCreate: "dashboard:smtp-create",
   smtpUpdate: "dashboard:smtp-update",
+  smtpImport: "dashboard:smtp-import",
   smtpFailures: "dashboard:smtp-failures",
   smtpUsage: "dashboard:smtp-usage",
   accounts: "dashboard:accounts",
@@ -66,6 +67,7 @@ const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
+const smtpImportModalId = "dashboard:smtp-import-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
 const emailCreateModalId = "dashboard:email-create-modal";
@@ -133,7 +135,7 @@ const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUpdate).setLabel("SMTP Update").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpFailures).setLabel("SMTP Failures").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUsage).setLabel("SMTP Usage").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -267,6 +269,30 @@ const createCampaignModal = (campaign?: {
       new ActionRowBuilder<TextInputBuilder>().addComponents(status)
     );
 };
+
+  const createSmtpImportModal = () => {
+    const emailAccountId = new TextInputBuilder()
+      .setCustomId("email_account_id")
+      .setLabel("Default email account id")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder("Optional default email account id");
+
+    const content = new TextInputBuilder()
+      .setCustomId("content")
+      .setLabel("SMTP account rows")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setPlaceholder("host,port,username,password,maxPerWindow,maxConcurrent,emailAccountId\n...");
+
+    return new ModalBuilder()
+      .setCustomId(smtpImportModalId)
+      .setTitle("Bulk SMTP Import")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(content)
+      );
+  };
 
   const createSmtpModal = (mode: "create" | "update") => {
     if (mode === "create") {
@@ -1077,6 +1103,11 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
+        if (interaction.customId === dashboardButtonIds.smtpImport) {
+          await interaction.showModal(createSmtpImportModal());
+          return;
+        }
+
         if (interaction.customId === dashboardButtonIds.campaignCreate) {
           await interaction.showModal(createCampaignModal());
           return;
@@ -1284,6 +1315,33 @@ export const startDiscordBot = async (): Promise<void> => {
           const address = interaction.fields.getTextInputValue("address").trim();
           const id = await createHierarchyRecord("email", { subdomain_id: subdomainId, address });
           await interaction.editReply(id === "db_required" ? id : `created email account ${id}`);
+          return;
+        }
+
+        if (interaction.customId === smtpImportModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const content = interaction.fields.getTextInputValue("content").trim();
+          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim() || undefined;
+
+          if (!content) {
+            await interaction.editReply("missing_import_content");
+            return;
+          }
+
+          try {
+            const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
+            const results = await ingestParsedAccounts(content, emailAccountId);
+            const created = results.filter((r) => r.id).length;
+            const failed = results.filter((r) => r.error).length;
+            await interaction.editReply(`SMTP import finished. Created: ${created}, Failed: ${failed}`);
+          } catch (err) {
+            await interaction.editReply("smtp_import_failed");
+          }
           return;
         }
 
