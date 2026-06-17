@@ -1298,13 +1298,22 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === campaignCreateModalId) {
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
-          const name = interaction.fields.getTextInputValue("name").trim();
-          const subject = interaction.fields.getTextInputValue("subject").trim();
-          const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
-          const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
-          const replyTo = interaction.fields.getTextInputValue("reply_to").trim();
-          const status = interaction.fields.getTextInputValue("status").trim();
+          const getFieldValue = (fieldId: string): string => {
+            try {
+              return interaction.fields.getTextInputValue(fieldId).trim();
+            } catch {
+              return "";
+            }
+          };
+
+          const campaignId = getFieldValue("campaign_id");
+          const name = getFieldValue("name");
+          const subject = getFieldValue("subject");
+          const bodyHtml = getFieldValue("body_html");
+          const fromAddress = getFieldValue("from_address");
+          const smtpAccountEmail = getFieldValue("smtp_account_email");
+          const replyTo = getFieldValue("reply_to");
+          const status = getFieldValue("status");
 
           const isLookupOnly = Boolean(campaignId) && !name && !subject && !bodyHtml && !fromAddress && !replyTo && !status;
           if (isLookupOnly) {
@@ -1340,7 +1349,8 @@ export const startDiscordBot = async (): Promise<void> => {
             bodyHtml,
             fromAddress,
             replyTo: replyTo === "" ? null : replyTo,
-            status: status || null
+            status: status || null,
+            smtpAccountEmail: smtpAccountEmail || null
           });
           await interaction.editReply(message);
           return;
