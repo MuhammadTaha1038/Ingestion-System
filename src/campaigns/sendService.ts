@@ -14,6 +14,7 @@ export interface CampaignSendDefinition {
   body_text: string | null;
   from_address: string;
   reply_to: string | null;
+  smtp_account_id?: string | null;
 }
 
 const getPool = (pool?: Pool): Pool => pool ?? getDatabasePool();
@@ -21,7 +22,7 @@ const getPool = (pool?: Pool): Pool => pool ?? getDatabasePool();
 export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefinition | null> => {
   const database = getPool(pool);
   const res = await database.query(
-    `SELECT id, subject, body_html, body_text, from_address, reply_to
+    `SELECT id, subject, body_html, body_text, from_address, reply_to, smtp_account_id
      FROM campaigns
      WHERE status = 'active'
      ORDER BY created_at DESC
@@ -34,7 +35,7 @@ export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefin
 export const selectCampaignById = async (campaignId: string, pool?: Pool): Promise<CampaignSendDefinition | null> => {
   const database = getPool(pool);
   const res = await database.query(
-    `SELECT id, name, status, subject, body_html, body_text, from_address, reply_to
+    `SELECT id, name, status, subject, body_html, body_text, from_address, reply_to, smtp_account_id
      FROM campaigns
      WHERE id = $1 AND status IN ('active','draft') LIMIT 1`,
     [campaignId]
