@@ -1737,6 +1737,7 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const content = options.getString("content") ?? "";
+        const sourcePath = options.getString("source_path") ?? undefined;
         const attachment = options.getAttachment("file");
         const defaultEmailAccountId = options.getString("email_account_id");
 
@@ -1751,14 +1752,18 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         const importText = content.trim() || fileContent.trim();
-        if (!importText) {
-          await commandInteraction.editReply("missing_content_or_file");
+        if (!importText && !sourcePath) {
+          await commandInteraction.editReply("missing_content_or_source_path");
           return;
         }
 
         try {
           const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
-          const results = await ingestParsedAccounts(importText, defaultEmailAccountId ?? undefined);
+          const results = await ingestParsedAccounts({
+            content: importText || undefined,
+            sourcePath,
+            defaultEmailAccountId: defaultEmailAccountId ?? undefined
+          });
           const success = results.filter((r: any) => r.id).length;
           const failed = results.filter((r: any) => r.error).length;
           await commandInteraction.editReply(`imported: ${success}, failed: ${failed}`);

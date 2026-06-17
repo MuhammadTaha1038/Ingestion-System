@@ -343,16 +343,21 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
     const body = request.body as Record<string, unknown> | undefined;
     const content = body?.content as string | undefined;
+    const sourcePath = body?.sourcePath as string | undefined;
     const defaultEmailAccountId = body?.emailAccountId as string | undefined;
 
-    if (!content || typeof content !== "string") {
-      reply.code(400).send({ error: "missing_content" });
+    if ((typeof content !== "string" || !content.trim()) && (typeof sourcePath !== "string" || !sourcePath.trim())) {
+      reply.code(400).send({ error: "missing_content_or_source_path" });
       return;
     }
 
     try {
       const { ingestParsedAccounts } = await import("../../smtp/bulkIngest.js");
-      const results = await ingestParsedAccounts(content, defaultEmailAccountId);
+      const results = await ingestParsedAccounts({
+        content: typeof content === "string" && content.trim() ? content : undefined,
+        sourcePath: typeof sourcePath === "string" && sourcePath.trim() ? sourcePath.trim() : undefined,
+        defaultEmailAccountId
+      });
       reply.send(ok({ results }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });

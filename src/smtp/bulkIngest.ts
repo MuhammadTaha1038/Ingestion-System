@@ -1,7 +1,9 @@
 import { SmtpRepository } from "../db/repositories/smtp.js";
 import { encrypt } from "../security/crypto.js";
+import { readFile } from "fs/promises";
+import { fileURLToPath } from "url";
 import { loadConfig } from "../config/config.js";
-import { createS3Client, putObjectText } from "../storage/s3.js";
+import { createS3Client, getObjectText, putObjectText, resolveS3Location } from "../storage/s3.js";
 
 export interface ParsedSmtpAccount {
   host: string;
@@ -57,15 +59,66 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
   return out;
 };
 
-export const ingestParsedAccounts = async (content: string, defaultEmailAccountId?: string) => {
+export interface IngestSmtpAccountsArgs {
+  content?: string;
+  sourcePath?: string;
+  defaultEmailAccountId?: string;
+}
+
+const fetchTextContent = async (sourcePath: string): Promise<string> => {
+  if (/^https?:\/\//i.test(sourcePath)) {
+    const response = await fetch(sourcePath);
+    if (!response.ok) {
+      throw new Error(`fetch_failed:${response.status}`);
+    }
+    return response.text();
+  }
+
+  if (sourcePath.startsWith("file://")) {
+    const filePath = fileURLToPath(sourcePath);
+    return (await readFile(filePath, "utf-8")).toString();
+  }
+
+  if (sourcePath.startsWith("s3://") || sourcePath.indexOf("://") === -1) {
+    const cfg = loadConfig();
+    const s3cfg = cfg.s3;
+    if (!s3cfg || !s3cfg.bucket || !s3cfg.endpoint || !s3cfg.accessKeyId || !s3cfg.secretAccessKey) {
+      throw new Error("s3_not_configured");
+    }
+
+    const client = createS3Client({
+      endpoint: s3cfg.endpoint,
+      region: s3cfg.region,
+      bucket: s3cfg.bucket,
+      accessKeyId: s3cfg.accessKeyId,
+      secretAccessKey: s3cfg.secretAccessKey
+    } as any);
+
+    const location = resolveS3Location(sourcePath, s3cfg.bucket);
+    return getObjectText(client, location.bucket, location.key);
+  }
+
+  throw new Error("unsupported_source_path");
+};
+
+export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
   const cfg = loadConfig();
-  const parsed = parseSmtpTxt(content);
+  let rawContent = args.content?.trim();
+  if ((!rawContent || rawContent.length === 0) && args.sourcePath) {
+    rawContent = await fetchTextContent(args.sourcePath.trim());
+  }
+
+  if (!rawContent || rawContent.trim().length === 0) {
+    throw new Error("missing_content_or_source_path");
+  }
+
+  const parsed = parseSmtpTxt(rawContent);
   const repo = new SmtpRepository();
   const results: Array<{ id?: string; error?: string; username?: string }> = [];
 
   for (const acc of parsed) {
     try {
-      const emailAccountId = acc.emailAccountId ?? defaultEmailAccountId;
+      const emailAccountId = acc.emailAccountId ?? args.defaultEmailAccountId;
       if (!emailAccountId) {
         results.push({ error: "missing_email_account_id", username: acc.username });
         continue;
@@ -103,7 +156,7 @@ export const ingestParsedAccounts = async (content: string, defaultEmailAccountI
       } as any);
 
       const key = `smtp-uploads/${Date.now()}-${Math.random().toString(36).slice(2,8)}.txt`;
-      await putObjectText(client, s3cfg.bucket, key, content, "text/plain");
+      await putObjectText(client, s3cfg.bucket, key, rawContent, "text/plain");
     }
   } catch (e) {
     // ignore S3 failures for now
