@@ -224,19 +224,11 @@ const createCampaignModal = (campaign?: {
   reply_to: string | null;
   smtp_account_email?: string | null;
 }) => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.id ?? "")
-    .setPlaceholder("Optional campaign id to load or update");
-
   const name = new TextInputBuilder()
     .setCustomId("name")
     .setLabel("Campaign name")
     .setStyle(TextInputStyle.Short)
-    .setRequired(false)
+    .setRequired(true)
     .setValue(campaign?.name ?? "")
     .setPlaceholder("Descriptive campaign name");
 
@@ -244,7 +236,7 @@ const createCampaignModal = (campaign?: {
     .setCustomId("subject")
     .setLabel("Email subject")
     .setStyle(TextInputStyle.Short)
-    .setRequired(false)
+    .setRequired(true)
     .setValue(campaign?.subject ?? "")
     .setPlaceholder("The email subject line");
 
@@ -252,7 +244,7 @@ const createCampaignModal = (campaign?: {
     .setCustomId("body_html")
     .setLabel("HTML body")
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(false)
+    .setRequired(true)
     .setValue(campaign?.body_html ?? "")
     .setPlaceholder("HTML email body content");
 
@@ -260,46 +252,27 @@ const createCampaignModal = (campaign?: {
     .setCustomId("from_address")
     .setLabel("From address")
     .setStyle(TextInputStyle.Short)
-    .setRequired(false)
+    .setRequired(true)
     .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
 
-  const replyTo = new TextInputBuilder()
-    .setCustomId("reply_to")
-    .setLabel("Reply-to address")
+  const smtpAccountEmail = new TextInputBuilder()
+    .setCustomId("smtp_account_email")
+    .setLabel("SMTP account email (optional)")
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
-    .setValue(campaign?.reply_to ?? "")
-    .setPlaceholder("reply-to email address (optional)");
-
-  const status = new TextInputBuilder()
-    .setCustomId("status")
-    .setLabel("Campaign status")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.status ?? "")
-    .setPlaceholder("draft, active, paused, archived");
+    .setValue(campaign?.smtp_account_email ?? "")
+    .setPlaceholder("user@example.com");
 
   return new ModalBuilder()
     .setCustomId(campaignCreateModalId)
     .setTitle(campaign ? "Update Campaign" : "Create Campaign")
     .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
       new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(status),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId("smtp_account_email")
-          .setLabel("SMTP account email (optional)")
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setValue(campaign?.smtp_account_email ?? "")
-          .setPlaceholder("user@example.com")
-      )
+      new ActionRowBuilder<TextInputBuilder>().addComponents(smtpAccountEmail)
     );
 };
 
