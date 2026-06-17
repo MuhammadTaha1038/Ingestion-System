@@ -17,7 +17,7 @@ export interface ParsedSmtpAccount {
   useTls?: boolean;
   maxPerWindow?: number;
   maxConcurrent?: number;
-  emailAccountId?: string;
+  emailAccountReference?: string;
 }
 
 // Very forgiving parser: supports CSV (header) or comma/space-separated lines
@@ -60,7 +60,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
     let portText: string | undefined;
     let username = "";
     let password = "";
-    let emailAccountId: string | undefined;
+    let emailAccountReference: string | undefined;
 
     // Check if first column is host:port combined
     if (host.includes(":")) {
@@ -73,7 +73,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
         // Remaining columns: username, password, emailAccountId
         username = cols[1] ?? "";
         password = cols[2] ?? "";
-        emailAccountId = cols[3] ?? undefined;
+        emailAccountReference = cols[3] ?? undefined;
         logger.info("smtp_parser: parsed combined format", { host, portText, username });
       } else {
         // Invalid format, skip
@@ -81,11 +81,11 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
         continue;
       }
     } else {
-      // Separate format: host,port,username,password,[maxPerWindow],[maxConcurrent],[emailAccountId]
+      // Separate format: host,port,username,password,[maxPerWindow],[maxConcurrent],[emailAccountReference]
       portText = cols[1];
       username = cols[2] ?? "";
       password = cols[3] ?? "";
-      emailAccountId = cols[4] ?? undefined;
+      emailAccountReference = cols[4] ?? undefined;
       logger.info("smtp_parser: parsed separate format", { host, portText, username });
     }
 
@@ -100,16 +100,6 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       continue;
     }
 
-    // Validate emailAccountId format if provided - must be UUID
-    if (emailAccountId) {
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(emailAccountId)) {
-        logger.info("smtp_parser: invalid emailAccountId format (not UUID), skipping", { emailAccountId, username });
-        continue;
-      }
-    }
-
-
     const account: ParsedSmtpAccount = {
       host,
       port: Number.isFinite(port) ? (port as number) : undefined,
@@ -118,7 +108,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       useTls: true,
       maxPerWindow: Number.isFinite(maxPerWindow) ? (maxPerWindow as number) : undefined,
       maxConcurrent: Number.isFinite(maxConcurrent) ? (maxConcurrent as number) : undefined,
-      emailAccountId
+      emailAccountReference
     };
     
     logger.info("smtp_parser: account extracted", { host: account.host, port: account.port, username: account.username });
@@ -132,7 +122,7 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
 export interface IngestSmtpAccountsArgs {
   content?: string;
   sourcePath?: string;
-  defaultEmailAccountId?: string;
+  defaultEmailAccountReference?: string;
 }
 
 const fetchTextContent = async (sourcePath: string): Promise<string> => {
@@ -205,12 +195,19 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
 
   for (const acc of parsed) {
     try {
-      const emailAccountId = acc.emailAccountId ?? args.defaultEmailAccountId;
-      logger.info("smtp_ingest: processing account", { host: acc.host, username: acc.username, hasEmailAccountId: !!emailAccountId });
+      const emailAccountReference = acc.emailAccountReference ?? args.defaultEmailAccountReference;
+      logger.info("smtp_ingest: processing account", { host: acc.host, username: acc.username, emailAccountReference: !!emailAccountReference });
       
+      if (!emailAccountReference) {
+        logger.info("smtp_ingest: missing email account reference", { username: acc.username });
+        results.push({ error: "missing_email_account_reference", username: acc.username });
+        continue;
+      }
+
+      const emailAccountId = await resolveEmailAccountId(emailAccountReference);
       if (!emailAccountId) {
-        logger.info("smtp_ingest: missing emailAccountId", { username: acc.username });
-        results.push({ error: "missing_email_account_id", username: acc.username });
+        logger.info("smtp_ingest: email account not found", { emailAccountReference, username: acc.username });
+        results.push({ error: "email_account_not_found", username: acc.username });
         continue;
       }
 
@@ -258,5 +255,13 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
 
   logger.info("smtp_ingest: complete", { successCount: results.filter((r) => r.id).length, failCount: results.filter((r) => r.error).length });
   return results;
+};
+
+const resolveEmailAccountId = async (reference: string): Promise<string | null> => {
+  const repo = new (await import("../db/repositories/hierarchy.js")).HierarchyRepository();
+  const list = await repo.listEmailAccounts();
+  const lower = reference.trim().toLowerCase();
+  const match = list.find((row) => row.address.trim().toLowerCase() === lower);
+  return match ? match.id : null;
 };
 

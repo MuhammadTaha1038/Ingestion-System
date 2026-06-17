@@ -198,18 +198,19 @@ const createSmtpImportModal = () => {
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
-  const emailAccountId = new TextInputBuilder()
-    .setCustomId("email_account_id")
-    .setLabel("Default email account id (optional)")
+  const emailAccountAddress = new TextInputBuilder()
+    .setCustomId("email_account_address")
+    .setLabel("Email account address (optional)")
     .setStyle(TextInputStyle.Short)
-    .setRequired(false);
+    .setRequired(false)
+    .setPlaceholder("user@example.com");
 
   return new ModalBuilder()
     .setCustomId(smtpImportModalId)
     .setTitle("SMTP Import")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountId)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountAddress)
     );
 };
 
@@ -454,7 +455,7 @@ const queueDashboardIngestion = async (args: {
 
 const queueDashboardSmtpImport = async (args: {
   sourcePath: string;
-  defaultEmailAccountId?: string;
+  defaultEmailAccountReference?: string;
 }): Promise<string> => {
   if (!config.databaseUrl) {
     return "db_required";
@@ -468,16 +469,15 @@ const queueDashboardSmtpImport = async (args: {
     const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
     const results = await ingestParsedAccounts({
       sourcePath: args.sourcePath.trim(),
-      defaultEmailAccountId: args.defaultEmailAccountId?.trim() || undefined
+      defaultEmailAccountReference: args.defaultEmailAccountReference?.trim() || undefined
     });
-
     const successCount = results.filter((r) => r.id).length;
     const failCount = results.filter((r) => r.error).length;
 
     return [
       `Imported ${successCount} SMTP account(s).`,
       failCount > 0 ? `Failed ${failCount} account(s).` : null,
-      args.defaultEmailAccountId ? `Default emailAccountId: ${args.defaultEmailAccountId}` : null
+      args.defaultEmailAccountReference ? `Attached to email: ${args.defaultEmailAccountReference}` : null
     ]
       .filter(Boolean)
       .join(" ");
@@ -1277,8 +1277,8 @@ export const startDiscordBot = async (): Promise<void> => {
         if (interaction.customId === smtpImportModalId) {
           await interaction.deferReply({ ephemeral: true });
           const sourcePath = interaction.fields.getTextInputValue("source_path").trim();
-          const emailAccountId = interaction.fields.getTextInputValue("email_account_id").trim() || undefined;
-          const message = await queueDashboardSmtpImport({ sourcePath, defaultEmailAccountId: emailAccountId });
+          const emailAccountAddress = interaction.fields.getTextInputValue("email_account_address").trim() || undefined;
+          const message = await queueDashboardSmtpImport({ sourcePath, defaultEmailAccountReference: emailAccountAddress });
           await interaction.editReply(message);
           return;
         }
@@ -1824,7 +1824,7 @@ export const startDiscordBot = async (): Promise<void> => {
           const results = await ingestParsedAccounts({
             content: importText || undefined,
             sourcePath,
-            defaultEmailAccountId: defaultEmailAccountId ?? undefined
+            defaultEmailAccountReference: defaultEmailAccountId ?? undefined
           });
           const success = results.filter((r: any) => r.id).length;
           const failed = results.filter((r: any) => r.error).length;

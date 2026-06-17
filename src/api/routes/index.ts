@@ -356,7 +356,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       const results = await ingestParsedAccounts({
         content: typeof content === "string" && content.trim() ? content : undefined,
         sourcePath: typeof sourcePath === "string" && sourcePath.trim() ? sourcePath.trim() : undefined,
-        defaultEmailAccountId
+        defaultEmailAccountReference: defaultEmailAccountId
       });
       reply.send(ok({ results }));
     } catch (err) {
