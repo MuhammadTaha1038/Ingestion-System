@@ -1,49 +1,102 @@
-# Deployment Runbook (MVP)
+# Deployment Runbook
 
-This runbook lists the verified steps to deploy the Phase 1 MVP to a Linux VM.
+This document describes the verified deployment process for the ingestion system on a Linux VPS.
 
-1. Provision server(s)
-  - Ubuntu 22.04 LTS
-  - Install Node.js 20+, PostgreSQL, Redis
+## 1. Server requirements
+- Ubuntu 22.04 LTS (or compatible Linux host)
+- Node.js 20.x installed
+- PostgreSQL accessible via `DATABASE_URL`
+- Redis accessible via `REDIS_URL`
+- Optional but recommended: local `.env` file in the deployment directory for environment variables
 
-2. Environment and secrets
-  - `DATABASE_URL` (postgres)
-  - `REDIS_URL`
-  - `ENCRYPTION_KEY` (32+ chars)
-  - `DISCORD_BOT_TOKEN`, `DISCORD_APP_ID`, `DISCORD_SERVER_ID` (required for Discord commands)
+## 2. Verified production service configuration
+- Service path: `/opt/ingestion-system`
+- Service unit: `ingestion-system.service`
+- Systemd unit path: `/etc/systemd/system/ingestion-system.service`
+- Service startup command: `/usr/bin/node /opt/ingestion-system/dist/main.js`
+- Environment file loaded by systemd: `/opt/ingestion-system/.env`
 
-3. Build and run
-  - Clone repo, install deps `npm ci`
-  - Build: `npm run build`
-  - Run: `NODE_ENV=production node dist/main.js`
+## 3. Required environment variables
+The deployment requires these environment variables, stored securely in `/opt/ingestion-system/.env` or the runtime environment:
+- `DATABASE_URL`
+- `REDIS_URL`
+- `ENCRYPTION_KEY`
+- `DISCORD_BOT_TOKEN`
+- `DISCORD_APP_ID`
+- `DISCORD_SERVER_ID`
+- `NODE_ENV=production`
 
-4. Deploy from GitHub
-  - On the VPS, pull the latest commit from `origin/main`
-  - Rebuild the project with `npm run build`
-  - Restart the service with `systemctl restart ingestion-system`
-  - Confirm the checkout is on the latest commit with `git log --oneline -1`
+> Do not store secrets in Git. Keep `.env` excluded from source control.
 
-5. Services
-  - Run workers and scheduler via systemd or PM2 with env vars:
-    - `RUN_INGESTION_WORKER=true`
-    - `RUN_SENDING_WORKER=true`
-    - `RUN_WINDOW_RESETTER=true`
-    - `RUN_DISCORD_BOT=true`
-  - The verified systemd unit is `ops/ingestion-system.service`
-  - The verified service name is `ingestion-system.service`
-  - Sample healthcheck is `ops/healthcheck.sh`
+## 4. Deployment workflow
+Use the following steps on the VPS after SSH’ing into the server.
 
-6. Health checks
-  - API health: `GET /health`
-  - Queue status: `GET /queue`
-  - Metrics: `GET /metrics`
-  - Logs: `GET /logs`
-  - Server healthcheck: `bash ops/healthcheck.sh`
+```bash
+cd /opt/ingestion-system
+git pull origin main
+npm ci
+npm run build
+systemctl restart ingestion-system
+```
 
-7. Verification after restart
-  - Confirm `systemctl status ingestion-system`
-  - Confirm `curl http://127.0.0.1:3000/health` returns `{"status":"ok"}`
-  - Confirm `bash ops/healthcheck.sh` returns exit code `0`
+If the repository is not yet cloned on the server, use:
 
-8. Rollback
-  - Keep previous release and restart with previous build.
+```bash
+git clone https://github.com/<owner>/<repo>.git /opt/ingestion-system
+cd /opt/ingestion-system
+npm ci
+npm run build
+systemctl enable ingestion-system
+systemctl start ingestion-system
+```
+
+## 5. Build and continuous deployment notes
+- `npm ci` installs the exact dependencies from `package-lock.json`
+- `npm run build` compiles TypeScript into `dist/`
+- The systemd service reads `/opt/ingestion-system/.env`, so update that file before restarting if configuration changes
+
+## 6. Health checks and verification
+After deployment, verify the service is healthy:
+
+```bash
+systemctl status ingestion-system
+curl -s http://127.0.0.1:3000/health
+```
+
+Expected health response:
+
+```json
+{"status":"ok"}
+```
+
+Also verify the internal healthcheck script:
+
+```bash
+bash /opt/ingestion-system/ops/healthcheck.sh
+```
+
+## 7. Service restart and logs
+- Restart service: `systemctl restart ingestion-system`
+- Check status: `systemctl status ingestion-system`
+- View logs: `journalctl -u ingestion-system -n 100 --no-pager`
+
+## 8. Deployment validation checklist
+- [ ] Git pull completed without conflicts
+- [ ] `npm ci` completed successfully
+- [ ] `npm run build` completed without compilation errors
+- [ ] `systemctl restart ingestion-system` succeeded
+- [ ] `systemctl status ingestion-system` shows `active (running)`
+- [ ] `curl -s http://127.0.0.1:3000/health` returns `{"status":"ok"}`
+- [ ] `bash /opt/ingestion-system/ops/healthcheck.sh` returns `healthcheck ok`
+
+## 9. Rollback guidance
+If a new deployment fails, revert to the previous commit and restart the service:
+
+```bash
+cd /opt/ingestion-system
+git checkout HEAD@{1}
+npm run build
+systemctl restart ingestion-system
+```
+
+> Keep a backup of the previous working commit or tagged release for safer rollback.

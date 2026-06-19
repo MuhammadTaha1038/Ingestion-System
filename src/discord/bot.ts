@@ -53,6 +53,8 @@ const dashboardButtonIds = {
   campaigns: "dashboard:campaigns",
   campaignCreate: "dashboard:campaign-create",
   campaignUpdate: "dashboard:campaign-update",
+  campaignDelete: "dashboard:campaign-delete",
+  campaignUsage: "dashboard:campaign-usage",
   cpanelCreate: "dashboard:cpanel-create",
   subdomainCreate: "dashboard:subdomain-create",
   emailCreate: "dashboard:email-create",
@@ -66,6 +68,8 @@ const dashboardButtonIds = {
 
 const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
+const campaignUpdateModalId = "dashboard:campaign-update-modal";
+const campaignDeleteModalId = "dashboard:campaign-delete-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
 const smtpDeleteModalId = "dashboard:smtp-delete-modal";
@@ -145,20 +149,21 @@ const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelCreate).setLabel("cPanel Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainList).setLabel("Subdomain List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainCreate).setLabel("Subdomain Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.emailList).setLabel("Email List").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Campaign Update").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.emailCreate).setLabel("Email Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.health).setLabel("Health").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.window).setLabel("Window").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.logs).setLabel("Logs").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.storage).setLabel("Storage").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUsage).setLabel("Campaign Usage").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.pause).setLabel("Pause").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(dashboardButtonIds.resume).setLabel("Resume").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(dashboardButtonIds.accounts).setLabel("Accounts").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignDelete).setLabel("Campaign Delete").setStyle(ButtonStyle.Danger)
   )
 ];
 
@@ -280,30 +285,12 @@ const parseSmtpUpdateText = (text: string) => {
   return patch;
 };
 
-const createCampaignModal = (campaign?: {
-  id: string;
-  name: string;
-  status: string;
-  subject: string;
-  body_html: string;
-  from_address: string;
-  reply_to: string | null;
-  smtp_account_email?: string | null;
-}) => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID (optional)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.id ?? "")
-    .setPlaceholder("Existing campaign ID to update");
-
+const createCampaignModal = () => {
   const name = new TextInputBuilder()
     .setCustomId("name")
     .setLabel("Campaign name")
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setValue(campaign?.name ?? "")
     .setPlaceholder("Descriptive campaign name");
 
   const subject = new TextInputBuilder()
@@ -311,35 +298,197 @@ const createCampaignModal = (campaign?: {
     .setLabel("Email subject")
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setValue(campaign?.subject ?? "")
     .setPlaceholder("The email subject line");
 
-  const bodyHtml = new TextInputBuilder()
-    .setCustomId("body_html")
-    .setLabel("HTML body")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setValue(campaign?.body_html ?? "")
-    .setPlaceholder("HTML email body content");
+  const smtpAccountEmail = new TextInputBuilder()
+    .setCustomId("smtp_account_email")
+    .setLabel("SMTP account email (optional)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder("user@example.com");
 
   const fromAddress = new TextInputBuilder()
     .setCustomId("from_address")
     .setLabel("From address")
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
+
+  const bodyHtml = new TextInputBuilder()
+    .setCustomId("body_html")
+    .setLabel("HTML body")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder("HTML email body content");
 
   return new ModalBuilder()
     .setCustomId(campaignCreateModalId)
-    .setTitle(campaign ? "Update Campaign" : "Create Campaign")
+    .setTitle("Create Campaign")
     .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(smtpAccountEmail),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml)
     );
+};
+
+const createCampaignUpdateModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Select the campaign to update");
+
+  const updates = new TextInputBuilder()
+    .setCustomId("updates")
+    .setLabel("Fields to update")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder(
+      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, from_address, reply_to, smtp_account_email, status"
+    );
+
+  return new ModalBuilder()
+    .setCustomId(campaignUpdateModalId)
+    .setTitle("Update Campaign")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
+    );
+};
+
+const createCampaignDeleteModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Campaign id to delete");
+
+  const confirm = new TextInputBuilder()
+    .setCustomId("confirm")
+    .setLabel("Type DELETE to confirm")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(campaignDeleteModalId)
+    .setTitle("Delete Campaign")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(confirm)
+    );
+};
+
+const parseCampaignUpdateText = (text: string) => {
+  const patch: Record<string, unknown> = {};
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const [key, ...rest] = line.split("=");
+    if (!key) continue;
+    const value = rest.join("=").trim();
+    switch (key.trim().toLowerCase()) {
+      case "name":
+      case "subject":
+      case "body_html":
+      case "from_address":
+      case "reply_to":
+      case "smtp_account_email":
+      case "status":
+        patch[key.trim().toLowerCase()] = value;
+        break;
+    }
+  }
+
+  return patch;
+};
+
+const updateCampaignFromPatch = async (campaignId: string, patch: Record<string, unknown>): Promise<string> => {
+  if (!config.databaseUrl) {
+    return "db_required";
+  }
+
+  const pool = getDatabasePool();
+  const fields: string[] = [];
+  const values: unknown[] = [];
+
+  if (typeof patch.name === "string") {
+    fields.push(`name = $${fields.length + 1}`);
+    values.push(patch.name);
+  }
+  if (typeof patch.subject === "string") {
+    fields.push(`subject = $${fields.length + 1}`);
+    values.push(patch.subject);
+  }
+  if (typeof patch.body_html === "string") {
+    fields.push(`body_html = $${fields.length + 1}`);
+    values.push(patch.body_html);
+  }
+  if (typeof patch.from_address === "string") {
+    fields.push(`from_address = $${fields.length + 1}`);
+    values.push(patch.from_address);
+  }
+  if (typeof patch.reply_to === "string") {
+    fields.push(`reply_to = $${fields.length + 1}`);
+    values.push(patch.reply_to === "" ? null : patch.reply_to);
+  }
+
+  if (typeof patch.smtp_account_email === "string") {
+    const smtpRepo = new SmtpRepository();
+    const emailRef = patch.smtp_account_email.trim();
+    if (emailRef === "") {
+      fields.push("smtp_account_id = NULL");
+    } else {
+      let found = null as any;
+      if (emailRef.includes("@")) {
+        const parts = emailRef.split("@");
+        const username = parts[0];
+        const host = parts.slice(1).join("@");
+        found = await smtpRepo.findByUsernameAndHost(username, host);
+      }
+      if (!found) {
+        found = await smtpRepo.findByUsername(emailRef);
+      }
+      if (!found) {
+        return "smtp_account_email_not_found";
+      }
+      fields.push(`smtp_account_id = $${fields.length + 1}`);
+      values.push(found.id);
+    }
+  }
+
+  if (typeof patch.status === "string") {
+    const status = patch.status.toLowerCase();
+    const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
+    if (!allowedStatuses.has(status)) {
+      return "invalid_status";
+    }
+    fields.push(`status = $${fields.length + 1}`);
+    values.push(status);
+  }
+
+  if (fields.length === 0) {
+    return "no_fields_to_update";
+  }
+
+  values.push(campaignId);
+  const res = await pool.query(
+    `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id`,
+    values
+  );
+
+  return res.rows[0] ? `updated campaign ${res.rows[0].id}` : "campaign_not_found";
+};
+
+const deleteCampaignById = async (campaignId: string): Promise<string> => {
+  if (!config.databaseUrl) {
+    return "db_required";
+  }
+  const pool = getDatabasePool();
+  const res = await pool.query(`DELETE FROM campaigns WHERE id = $1 RETURNING id`, [campaignId]);
+  return res.rows[0] ? `deleted campaign ${res.rows[0].id}` : "campaign_not_found";
 };
 
   const createSmtpModal = (mode: "create" | "update") => {
@@ -1192,6 +1341,35 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
+        if (interaction.customId === dashboardButtonIds.campaignUsage) {
+          await interaction.deferReply({ ephemeral: true });
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const pool = getDatabasePool();
+          const res = await pool.query(
+            `SELECT c.id, c.name, c.status, COALESCE(SUM(j.total_count), 0) AS sent_count
+             FROM campaigns c
+             LEFT JOIN jobs j ON j.campaign_id = c.id AND j.type = 'sending' AND j.status = 'completed'
+             GROUP BY c.id, c.name, c.status
+             ORDER BY sent_count DESC NULLS LAST, c.created_at DESC LIMIT 20`
+          );
+
+          const rows = res.rows as Array<{ id: string; name: string; status: string; sent_count: number }>;
+          if (rows.length === 0) {
+            await interaction.editReply("No campaign usage records available yet.");
+            return;
+          }
+
+          await interaction.editReply(truncate([
+            "Campaign usage",
+            ...rows.map((row) => `- ${row.id} ${row.name} [${row.status}] sent=${row.sent_count}`)
+          ].join("\n")));
+          return;
+        }
+
         if (interaction.customId === dashboardButtonIds.smtpList || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
           await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
@@ -1244,6 +1422,16 @@ export const startDiscordBot = async (): Promise<void> => {
 
         if (interaction.customId === dashboardButtonIds.campaignCreate) {
           await interaction.showModal(createCampaignModal());
+          return;
+        }
+
+        if (interaction.customId === dashboardButtonIds.campaignUpdate) {
+          await interaction.showModal(createCampaignUpdateModal());
+          return;
+        }
+
+        if (interaction.customId === dashboardButtonIds.campaignDelete) {
+          await interaction.showModal(createCampaignDeleteModal());
           return;
         }
 
@@ -1386,61 +1574,72 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === campaignCreateModalId) {
-          const getFieldValue = (fieldId: string): string => {
-            try {
-              return interaction.fields.getTextInputValue(fieldId).trim();
-            } catch {
-              return "";
-            }
-          };
-
-          const campaignId = getFieldValue("campaign_id");
-          const name = getFieldValue("name");
-          const subject = getFieldValue("subject");
-          const bodyHtml = getFieldValue("body_html");
-          const fromAddress = getFieldValue("from_address");
-          const smtpAccountEmail = getFieldValue("smtp_account_email");
-          const replyTo = getFieldValue("reply_to");
-          const status = getFieldValue("status");
-
-          const isLookupOnly = Boolean(campaignId) && !name && !subject && !bodyHtml && !fromAddress;
-          if (isLookupOnly) {
-            if (!config.databaseUrl) {
-              await interaction.reply({ content: "db_required", ephemeral: true });
-              return;
-            }
-            const campaign = await selectCampaignById(campaignId);
-            if (!campaign) {
-              await interaction.reply({ content: "campaign_not_found", ephemeral: true });
-              return;
-            }
-            const castInteraction = interaction as unknown as { showModal?: (modal: any) => Promise<unknown> };
-            if (typeof castInteraction.showModal === "function") {
-              await castInteraction.showModal(createCampaignModal(campaign));
-              return;
-            }
-            await interaction.reply({ content: "Unable to open campaign form directly. Please try again.", ephemeral: true });
-            return;
-          }
-
           await interaction.deferReply({ ephemeral: true });
+          const name = interaction.fields.getTextInputValue("name").trim();
+          const subject = interaction.fields.getTextInputValue("subject").trim();
+          const smtpAccountEmail = interaction.fields.getTextInputValue("smtp_account_email").trim() || null;
+          const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
+          const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
 
-          if (!campaignId && (!name || !subject || !bodyHtml || !fromAddress)) {
+          if (!name || !subject || !fromAddress || !bodyHtml) {
             await interaction.editReply("missing_required_campaign_fields");
             return;
           }
 
           const message = await saveCampaignFromModal({
-            campaignId: campaignId || undefined,
             name,
             subject,
             bodyHtml,
             fromAddress,
-            replyTo: replyTo === "" ? null : replyTo,
-            status: status || null,
-            smtpAccountEmail: smtpAccountEmail || null
+            replyTo: null,
+            status: null,
+            smtpAccountEmail
           });
           await interaction.editReply(message);
+          return;
+        }
+
+        if (interaction.customId === campaignUpdateModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
+          const updatesText = interaction.fields.getTextInputValue("updates").trim();
+
+          if (!campaignId) {
+            await interaction.editReply("campaign_id_required");
+            return;
+          }
+          if (!updatesText) {
+            await interaction.editReply("no_update_fields_provided");
+            return;
+          }
+
+          const patch = parseCampaignUpdateText(updatesText);
+          const message = await updateCampaignFromPatch(campaignId, patch);
+          await interaction.editReply(message);
+          return;
+        }
+
+        if (interaction.customId === campaignDeleteModalId) {
+          await interaction.deferReply({ ephemeral: true });
+          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
+          const confirm = interaction.fields.getTextInputValue("confirm").trim();
+
+          if (!campaignId) {
+            await interaction.editReply("campaign_id_required");
+            return;
+          }
+          if (confirm !== "DELETE") {
+            await interaction.editReply("delete_confirmation_required");
+            return;
+          }
+
+          if (!config.databaseUrl) {
+            await interaction.editReply("db_required");
+            return;
+          }
+
+          const result = await deleteCampaignById(campaignId);
+          await interaction.editReply(result);
           return;
         }
 
