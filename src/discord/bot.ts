@@ -395,7 +395,7 @@ const createCampaignModal = (campaign?: {
           new TextInputBuilder().setCustomId("updates").setLabel("Fields to update")
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
-            .setPlaceholder("Example: host=smtp.example.com port=587 use_tls=true status=active max_per_window=100 max_concurrent=2")
+            .setPlaceholder("host=smtp.example.com port=587 use_tls=true status=active max_per_window=50")
         )
       );
   };
