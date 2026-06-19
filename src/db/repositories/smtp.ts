@@ -106,6 +106,7 @@ export class SmtpRepository {
     useTls?: boolean;
     maxPerWindow?: number;
     maxConcurrent?: number;
+    status?: string;
   }): Promise<void> {
     const fields: string[] = [];
     const values: unknown[] = [];
@@ -145,12 +146,21 @@ export class SmtpRepository {
       values.push(patch.maxConcurrent);
     }
 
+    if (typeof patch.status === "string") {
+      fields.push(`status = $${fields.length + 1}`);
+      values.push(patch.status);
+    }
+
     if (fields.length === 0) {
       return;
     }
 
     values.push(id);
     await this.pool.query(`UPDATE smtp_accounts SET ${fields.join(", ")} WHERE id = $${fields.length + 1}`, values);
+  }
+
+  async deleteSmtpAccount(id: string): Promise<void> {
+    await this.pool.query("DELETE FROM smtp_accounts WHERE id = $1", [id]);
   }
 
   async disableSmtpAccount(id: string): Promise<void> {

@@ -431,6 +431,13 @@ export const registerRoutes = (server: FastifyInstance): void => {
       if (typeof body.maxPerWindow === "number" || typeof body.maxPerWindow === "string") update.maxPerWindow = Number(body.maxPerWindow);
       if (typeof body.maxConcurrent === "number" || typeof body.maxConcurrent === "string") update.maxConcurrent = Number(body.maxConcurrent);
       if (typeof body.useTls === "boolean") update.useTls = body.useTls;
+      if (typeof body.status === "string") {
+        if (!["active", "disabled"].includes(body.status)) {
+          reply.code(400).send({ error: "invalid_status" });
+          return;
+        }
+        update.status = body.status;
+      }
       if (typeof body.password === "string") {
         const { encrypt } = await import("../../security/crypto.js");
         update.passwordEncrypted = encrypt(body.password);
@@ -438,14 +445,48 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
       await smtpRepo.updateSmtpAccount(id, update as any);
 
-      const shouldValidate = ["host", "port", "username", "useTls", "passwordEncrypted"].some((key) => key in update);
+      const shouldValidate = ["host", "port", "username", "useTls", "passwordEncrypted", "status"].some((key) => key in update);
       if (shouldValidate) {
+        if (update.status === "active") {
+          const { validateAndUpdateAccountStatus } = await import("../../smtp/validator.js");
+          const validation = await validateAndUpdateAccountStatus(smtpRepo, id);
+          reply.send(ok({ id, status: validation.ok ? "active" : "failed", validationError: validation.error }));
+          return;
+        }
+
+        if (update.status === "disabled") {
+          await smtpRepo.disableSmtpAccount(id);
+          reply.send(ok({ id, status: "disabled" }));
+          return;
+        }
+
         const { validateAndUpdateAccountStatus } = await import("../../smtp/validator.js");
         const validation = await validateAndUpdateAccountStatus(smtpRepo, id);
         reply.send(ok({ id, status: validation.ok ? "active" : "failed", validationError: validation.error }));
         return;
       }
 
+      reply.send(ok({ id }));
+    } catch (err) {
+      reply.code(500).send({ error: "internal_error" });
+    }
+  });
+
+  server.delete("/smtp/account/:id", async (request, reply) => {
+    if (!config.databaseUrl) {
+      reply.send(notReady("db_required"));
+      return;
+    }
+
+    const id = (request.params as { id?: string }).id;
+    if (!id) {
+      reply.code(400).send({ error: "invalid_request" });
+      return;
+    }
+
+    try {
+      const smtpRepo = new (await import("../../db/repositories/smtp.js")).SmtpRepository();
+      await smtpRepo.deleteSmtpAccount(id);
       reply.send(ok({ id }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });

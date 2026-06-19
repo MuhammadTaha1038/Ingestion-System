@@ -42,6 +42,7 @@ const dashboardButtonIds = {
   smtpList: "dashboard:smtp-list",
   smtpCreate: "dashboard:smtp-create",
   smtpUpdate: "dashboard:smtp-update",
+  smtpDelete: "dashboard:smtp-delete",
   smtpImport: "dashboard:smtp-import",
   smtpFailures: "dashboard:smtp-failures",
   smtpUsage: "dashboard:smtp-usage",
@@ -67,6 +68,7 @@ const ingestModalId = "dashboard:ingest-modal";
 const campaignCreateModalId = "dashboard:campaign-create-modal";
 const smtpCreateModalId = "dashboard:smtp-create-modal";
 const smtpUpdateModalId = "dashboard:smtp-update-modal";
+const smtpDeleteModalId = "dashboard:smtp-delete-modal";
 const smtpImportModalId = "dashboard:smtp-import-modal";
 const cpanelCreateModalId = "dashboard:cpanel-create-modal";
 const subdomainCreateModalId = "dashboard:subdomain-create-modal";
@@ -135,8 +137,8 @@ const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUpdate).setLabel("SMTP Update").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUsage).setLabel("SMTP Usage").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelList).setLabel("cPanel List").setStyle(ButtonStyle.Secondary),
@@ -212,6 +214,70 @@ const createSmtpImportModal = () => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
       new ActionRowBuilder<TextInputBuilder>().addComponents(emailAccountAddress)
     );
+};
+
+const createSmtpDeleteModal = () => {
+  return new ModalBuilder()
+    .setCustomId(smtpDeleteModalId)
+    .setTitle("Delete SMTP Account")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("id").setLabel("SMTP account id").setStyle(TextInputStyle.Short).setRequired(true)
+      ),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(
+        new TextInputBuilder().setCustomId("confirm").setLabel("Type DELETE to confirm").setStyle(TextInputStyle.Short).setRequired(true)
+      )
+    );
+};
+
+const parseSmtpUpdateText = (text: string) => {
+  const patch: Record<string, unknown> = {};
+  const pairs = text.split(/\s+/).filter(Boolean);
+  for (const pair of pairs) {
+    const [key, rawValue] = pair.split("=");
+    if (!key || rawValue === undefined) continue;
+
+    const value = rawValue.trim();
+    switch (key.trim().toLowerCase()) {
+      case "host":
+        patch.host = value;
+        break;
+      case "username":
+        patch.username = value;
+        break;
+      case "password":
+        patch.password = value;
+        break;
+      case "port": {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) patch.port = parsed;
+        break;
+      }
+      case "use_tls":
+      case "usetls":
+      case "tls":
+        patch.useTls = ["true", "1", "yes", "y"].includes(value.toLowerCase());
+        break;
+      case "status":
+        patch.status = value.toLowerCase();
+        break;
+      case "max_per_window":
+      case "maxperwindow":
+      case "max_perwindow": {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) patch.maxPerWindow = parsed;
+        break;
+      }
+      case "max_concurrent":
+      case "maxconcurrent": {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) patch.maxConcurrent = parsed;
+        break;
+      }
+    }
+  }
+
+  return patch;
 };
 
 const createCampaignModal = (campaign?: {
@@ -311,6 +377,9 @@ const createCampaignModal = (campaign?: {
           ),
           new ActionRowBuilder<TextInputBuilder>().addComponents(
             new TextInputBuilder().setCustomId("password").setLabel("SMTP password or app password").setStyle(TextInputStyle.Short).setRequired(true)
+          ),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder().setCustomId("port").setLabel("Port").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("587 or 465")
           )
         );
     }
@@ -323,16 +392,10 @@ const createCampaignModal = (campaign?: {
           new TextInputBuilder().setCustomId("id").setLabel("SMTP account id").setStyle(TextInputStyle.Short).setRequired(true)
         ),
         new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder().setCustomId("host").setLabel("SMTP host").setStyle(TextInputStyle.Short).setRequired(false)
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder().setCustomId("username").setLabel("SMTP username").setStyle(TextInputStyle.Short).setRequired(false)
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder().setCustomId("password").setLabel("SMTP password or app password").setStyle(TextInputStyle.Short).setRequired(false)
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder().setCustomId("port").setLabel("Port").setStyle(TextInputStyle.Short).setRequired(false)
+          new TextInputBuilder().setCustomId("updates").setLabel("Fields to update")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setPlaceholder("Example: host=smtp.example.com port=587 use_tls=true status=active max_per_window=100 max_concurrent=2")
         )
       );
   };
@@ -1187,6 +1250,11 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
+        if (interaction.customId === dashboardButtonIds.smtpDelete) {
+          await interaction.showModal(createSmtpDeleteModal());
+          return;
+        }
+
         if (interaction.customId === dashboardButtonIds.smtpImport) {
           await interaction.showModal(createSmtpImportModal());
           return;
@@ -1420,7 +1488,7 @@ export const startDiscordBot = async (): Promise<void> => {
           return;
         }
 
-        if (interaction.customId === smtpCreateModalId || interaction.customId === smtpUpdateModalId) {
+if (interaction.customId === smtpCreateModalId || interaction.customId === smtpUpdateModalId || interaction.customId === smtpDeleteModalId) {
           await interaction.deferReply({ ephemeral: true });
           if (!config.databaseUrl) {
             await interaction.editReply("db_required");
@@ -1433,20 +1501,27 @@ export const startDiscordBot = async (): Promise<void> => {
             const host = interaction.fields.getTextInputValue("host").trim();
             const username = interaction.fields.getTextInputValue("username").trim();
             const password = interaction.fields.getTextInputValue("password").trim();
+            const portText = interaction.fields.getTextInputValue("port").trim();
 
-            if (!emailAccountId || !host || !username || !password) {
+            if (!emailAccountId || !host || !username || !password || !portText) {
               await interaction.editReply("missing_required_smtp_fields");
               return;
             }
 
-            const port = Number(587);
+            const port = Number.isFinite(Number(portText)) ? Number(portText) : null;
+            if (port === null) {
+              await interaction.editReply("invalid_port");
+              return;
+            }
+
+            const useTls = port === 465 || port === 587;
             const createdId = await repo.createSmtpAccount({
               emailAccountId,
               host,
               port,
               username,
               passwordEncrypted: encrypt(password),
-              useTls: port === 465,
+              useTls,
               maxPerWindow: 50,
               maxConcurrent: 1
             });
@@ -1455,45 +1530,58 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          const id = interaction.fields.getTextInputValue("id").trim();
-          const host = interaction.fields.getTextInputValue("host").trim();
-          const username = interaction.fields.getTextInputValue("username").trim();
-          const password = interaction.fields.getTextInputValue("password").trim();
-          const portText = interaction.fields.getTextInputValue("port").trim();
+          if (interaction.customId === smtpUpdateModalId) {
+            const id = interaction.fields.getTextInputValue("id").trim();
+            const updatesText = interaction.fields.getTextInputValue("updates").trim();
 
-          const parseNumber = (value: string): number | undefined => {
-            if (!value) return undefined;
-            const parsed = Number(value);
-            return Number.isFinite(parsed) ? parsed : undefined;
-          };
+            if (!id) {
+              await interaction.editReply("smtp_account_id_required_for_update");
+              return;
+            }
 
-          const port = parseNumber(portText);
+            const patch = parseSmtpUpdateText(updatesText);
+            if (Object.keys(patch).length === 0) {
+              await interaction.editReply("no_fields_to_update");
+              return;
+            }
 
-          if (!id) {
-            await interaction.editReply("smtp_account_id_required_for_update");
+            if (typeof patch.password === "string") {
+              patch.passwordEncrypted = encrypt(patch.password);
+              delete patch.password;
+            }
+
+            await repo.updateSmtpAccount(id, patch as any);
+
+            const shouldValidate = ["host", "port", "username", "passwordEncrypted", "useTls", "status"].some((key) => key in patch);
+            if (shouldValidate && patch.status !== "disabled") {
+              const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+              const validation = await validateAndUpdateAccountStatus(repo, id);
+              await interaction.editReply(`updated smtp account ${id}. status=${validation.ok ? "active" : "failed"}${validation.error ? ` error=${validation.error}` : ""}`);
+              return;
+            }
+
+            await interaction.editReply(`updated smtp account ${id}`);
             return;
           }
 
-          const patch: {
-            host?: string;
-            port?: number;
-            username?: string;
-            passwordEncrypted?: string;
-          } = {};
+          if (interaction.customId === smtpDeleteModalId) {
+            const id = interaction.fields.getTextInputValue("id").trim();
+            const confirm = interaction.fields.getTextInputValue("confirm").trim();
 
-          if (host) patch.host = host;
-          if (typeof port === "number") patch.port = port;
-          if (username) patch.username = username;
-          if (password) patch.passwordEncrypted = encrypt(password);
+            if (!id) {
+              await interaction.editReply("smtp_account_id_required_for_delete");
+              return;
+            }
 
-          if (Object.keys(patch).length === 0) {
-            await interaction.editReply("no_fields_to_update");
+            if (confirm !== "DELETE") {
+              await interaction.editReply("delete_confirmation_required");
+              return;
+            }
+
+            await repo.deleteSmtpAccount(id);
+            await interaction.editReply(`deleted smtp account ${id}`);
             return;
           }
-
-          await repo.updateSmtpAccount(id, patch);
-          await interaction.editReply(`updated smtp account ${id}`);
-          return;
         }
 
       }
