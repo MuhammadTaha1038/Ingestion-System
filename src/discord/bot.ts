@@ -330,22 +330,6 @@ const createCampaignModal = (campaign?: {
     .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
 
-  const replyTo = new TextInputBuilder()
-    .setCustomId("reply_to")
-    .setLabel("Reply-to address (optional)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.reply_to ?? "")
-    .setPlaceholder("reply-to@example.com");
-
-  const smtpAccountEmail = new TextInputBuilder()
-    .setCustomId("smtp_account_email")
-    .setLabel("SMTP account email (optional)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setValue(campaign?.smtp_account_email ?? "")
-    .setPlaceholder("user@example.com");
-
   return new ModalBuilder()
     .setCustomId(campaignCreateModalId)
     .setTitle(campaign ? "Update Campaign" : "Create Campaign")
@@ -354,9 +338,7 @@ const createCampaignModal = (campaign?: {
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(smtpAccountEmail)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress)
     );
 };
 
@@ -1421,7 +1403,7 @@ export const startDiscordBot = async (): Promise<void> => {
           const replyTo = getFieldValue("reply_to");
           const status = getFieldValue("status");
 
-          const isLookupOnly = Boolean(campaignId) && !name && !subject && !bodyHtml && !fromAddress && !replyTo && !status;
+          const isLookupOnly = Boolean(campaignId) && !name && !subject && !bodyHtml && !fromAddress;
           if (isLookupOnly) {
             if (!config.databaseUrl) {
               await interaction.reply({ content: "db_required", ephemeral: true });
