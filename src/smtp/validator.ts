@@ -20,10 +20,12 @@ export const validateAccount = async (repo: SmtpRepository, accountId: string): 
 
     const password = decrypt(row.password_encrypted);
 
+    const secure = row.port === 465;
     const transporter = nodemailer.createTransport({
       host: row.host,
       port: row.port,
-      secure: row.use_tls,
+      secure,
+      requireTLS: row.use_tls && !secure,
       auth: {
         user: row.username,
         pass: password

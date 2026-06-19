@@ -104,16 +104,18 @@ export const registerCommands = async (): Promise<void> => {
       { name: "subject", type: 3, description: "email subject", required: true },
       { name: "body_html", type: 3, description: "HTML body", required: true },
       { name: "from_address", type: 3, description: "from address", required: true },
-      { name: "reply_to", type: 3, description: "reply-to address", required: false }
+      { name: "reply_to", type: 3, description: "reply-to address", required: false },
+      { name: "smtp_account_email", type: 3, description: "SMTP account email to send from", required: false }
     ] },
     { name: "campaign-update", description: "Update campaign", options: [
       { name: "id", type: 3, description: "campaign id", required: true },
       { name: "name", type: 3, description: "campaign name", required: false },
-      { name: "subject", type: 3, description: "email subject", required: false },
+      { name: "subject", type: 3, description: "campaign subject", required: false },
       { name: "body_html", type: 3, description: "HTML body", required: false },
       { name: "body_text", type: 3, description: "plain text body", required: false },
       { name: "from_address", type: 3, description: "from address", required: false },
       { name: "reply_to", type: 3, description: "reply-to address", required: false },
+      { name: "smtp_account_email", type: 3, description: "SMTP account email to send from", required: false },
       { name: "status", type: 3, description: "draft, active, paused, archived", required: false }
     ] },
     { name: "campaign-send", description: "Trigger campaign sending", options: [

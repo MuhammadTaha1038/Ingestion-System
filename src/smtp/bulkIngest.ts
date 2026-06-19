@@ -105,7 +105,8 @@ export const parseSmtpTxt = (content: string): ParsedSmtpAccount[] => {
       port: Number.isFinite(port) ? (port as number) : undefined,
       username,
       password: password ?? "",
-      useTls: true,
+      // If no explicit TLS preference is parsed, infer from port during ingest.
+      useTls: undefined,
       maxPerWindow: Number.isFinite(maxPerWindow) ? (maxPerWindow as number) : undefined,
       maxConcurrent: Number.isFinite(maxConcurrent) ? (maxConcurrent as number) : undefined,
       emailAccountReference
@@ -214,13 +215,14 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
       }
 
       const encrypted = encrypt(acc.password);
+      const port = acc.port ?? 587;
       const id = await repo.createSmtpAccount({
         emailAccountId,
         host: acc.host,
-        port: acc.port ?? 587,
+        port,
         username: acc.username,
         passwordEncrypted: encrypted,
-        useTls: acc.useTls ?? true,
+        useTls: typeof acc.useTls === "boolean" ? acc.useTls : port === 465,
         maxPerWindow: acc.maxPerWindow ?? 50,
         maxConcurrent: acc.maxConcurrent ?? 1
       });

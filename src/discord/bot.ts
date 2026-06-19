@@ -224,6 +224,14 @@ const createCampaignModal = (campaign?: {
   reply_to: string | null;
   smtp_account_email?: string | null;
 }) => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID (optional)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.id ?? "")
+    .setPlaceholder("Existing campaign ID to update");
+
   const name = new TextInputBuilder()
     .setCustomId("name")
     .setLabel("Campaign name")
@@ -256,6 +264,14 @@ const createCampaignModal = (campaign?: {
     .setValue(campaign?.from_address ?? "")
     .setPlaceholder("sender@example.com");
 
+  const replyTo = new TextInputBuilder()
+    .setCustomId("reply_to")
+    .setLabel("Reply-to address (optional)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setValue(campaign?.reply_to ?? "")
+    .setPlaceholder("reply-to@example.com");
+
   const smtpAccountEmail = new TextInputBuilder()
     .setCustomId("smtp_account_email")
     .setLabel("SMTP account email (optional)")
@@ -268,10 +284,12 @@ const createCampaignModal = (campaign?: {
     .setCustomId(campaignCreateModalId)
     .setTitle(campaign ? "Update Campaign" : "Create Campaign")
     .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml),
       new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(replyTo),
       new ActionRowBuilder<TextInputBuilder>().addComponents(smtpAccountEmail)
     );
 };
@@ -524,7 +542,6 @@ const saveCampaignFromModal = async (args: {
   let smtpAccountId: string | null = null;
   if (args.smtpAccountEmail) {
     const smtpRepo = new SmtpRepository();
-    // try lookup by username@host first, then by username only
     const emailRef = args.smtpAccountEmail.trim();
     let found = null as any;
     if (emailRef.includes("@")) {
@@ -536,7 +553,10 @@ const saveCampaignFromModal = async (args: {
     if (!found) {
       found = await smtpRepo.findByUsername(emailRef);
     }
-    if (found) smtpAccountId = found.id;
+    if (!found) {
+      return "smtp_account_email_not_found";
+    }
+    smtpAccountId = found.id;
   }
 
   if (args.campaignId) {
@@ -682,9 +702,9 @@ const formatPersistentJobSummary = (summary: PersistentJobSummary): string => {
   return lines.join("\n");
 };
 
-const formatCampaignRows = (rows: Array<{ id: string; name: string; subject: string; status: string }>): string => {
+const formatCampaignRows = (rows: Array<{ id: string; name: string; subject: string; status: string; smtp_account_address?: string | null }>): string => {
   if (rows.length === 0) return "no_campaigns";
-  return rows.slice(0, 10).map((row) => `${row.id} ${row.name} [${row.status}] ${row.subject}`).join("\n");
+  return rows.slice(0, 10).map((row) => `${row.id} ${row.name} [${row.status}] ${row.subject}${row.smtp_account_address ? ` smtp=${row.smtp_account_address}` : ""}`).join("\n");
 };
 
 const formatCpanelRows = (rows: Array<{ id: string; name: string }>): string => {
@@ -1033,9 +1053,21 @@ export const startDiscordBot = async (): Promise<void> => {
             return;
           }
 
-          const repo = new SmtpRepository();
-          const accounts = await repo.listAllAccounts();
-          await interaction.editReply(truncate(accounts.length === 0 ? "no_accounts" : accounts.slice(0, 10).map((a) => `${a.id} ${a.username}@${a.host} [${a.status}]`).join("\n")));
+          const pool = getDatabasePool();
+          const rows = await pool.query(
+            `SELECT sa.id, sa.username, sa.host, sa.port, sa.status, ea.address AS email_account_address
+             FROM smtp_accounts sa
+             LEFT JOIN email_accounts ea ON sa.email_account_id = ea.id
+             ORDER BY sa.created_at DESC LIMIT 10`
+          );
+
+          await interaction.editReply(truncate(
+            rows.rows.length === 0
+              ? "no_accounts"
+              : rows.rows.map((row: { id: string; username: string; host: string; port: number; status: string; email_account_address: string | null }) =>
+                  `${row.id} ${row.username}@${row.host}:${row.port} [${row.status}] email=${row.email_account_address ?? "unknown"}`
+                ).join("\n")
+          ));
           return;
         }
 
@@ -1104,8 +1136,14 @@ export const startDiscordBot = async (): Promise<void> => {
           }
 
           const pool = getDatabasePool();
-          const res = await pool.query("SELECT id, name, subject, status FROM campaigns ORDER BY created_at DESC LIMIT 10");
-          await interaction.editReply(truncate(formatCampaignRows(res.rows as Array<{ id: string; name: string; subject: string; status: string }>)));
+          const res = await pool.query(
+            `SELECT c.id, c.name, c.subject, c.status, ea.address AS smtp_account_address
+             FROM campaigns c
+             LEFT JOIN smtp_accounts sa ON c.smtp_account_id = sa.id
+             LEFT JOIN email_accounts ea ON sa.email_account_id = ea.id
+             ORDER BY c.created_at DESC LIMIT 10`
+          );
+          await interaction.editReply(truncate(formatCampaignRows(res.rows as Array<{ id: string; name: string; subject: string; status: string; smtp_account_address?: string | null }>)));
           return;
         }
 
@@ -1401,13 +1439,14 @@ export const startDiscordBot = async (): Promise<void> => {
               return;
             }
 
+            const port = Number(587);
             const createdId = await repo.createSmtpAccount({
               emailAccountId,
               host,
-              port: 587,
+              port,
               username,
               passwordEncrypted: encrypt(password),
-              useTls: true,
+              useTls: port === 465,
               maxPerWindow: 50,
               maxConcurrent: 1
             });
@@ -1796,7 +1835,7 @@ export const startDiscordBot = async (): Promise<void> => {
         const username = options.getString("username", true);
         const password = options.getString("password", true);
         const port = options.getInteger("port") ?? 587;
-        const useTls = options.getBoolean("use_tls") ?? true;
+        const useTls = options.getBoolean("use_tls") ?? port === 465;
         const maxPerWindow = options.getInteger("max_per_window") ?? 50;
         const maxConcurrent = options.getInteger("max_concurrent") ?? 1;
 
@@ -2006,11 +2045,41 @@ export const startDiscordBot = async (): Promise<void> => {
         const bodyHtml = options.getString("body_html", true);
         const fromAddress = options.getString("from_address", true);
         const replyTo = options.getString("reply_to") ?? null;
+        const smtpAccountEmail = options.getString("smtp_account_email") ?? undefined;
+
+        let smtpAccountId: string | null = null;
+        if (smtpAccountEmail) {
+          const smtpRepo = new SmtpRepository();
+          const ref = smtpAccountEmail.trim();
+          let found = null as any;
+          if (ref.includes("@")) {
+            const parts = ref.split("@");
+            const username = parts[0];
+            const host = parts.slice(1).join("@");
+            found = await smtpRepo.findByUsernameAndHost(username, host);
+          }
+          if (!found) {
+            found = await smtpRepo.findByUsername(ref);
+          }
+          if (!found) {
+            await commandInteraction.editReply("smtp_account_email_not_found");
+            return;
+          }
+          smtpAccountId = found.id;
+        }
 
         const pool = getDatabasePool();
+        const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
+        const createValues: unknown[] = [name, subject, bodyHtml, fromAddress, replyTo];
+        if (smtpAccountId) {
+          createFields.push("smtp_account_id");
+          createValues.push(smtpAccountId);
+        }
+
+        const placeholders = createValues.map((_, index) => `$${index + 1}`).join(",");
         const res = await pool.query(
-          `INSERT INTO campaigns (name, subject, body_html, from_address, reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-          [name, subject, bodyHtml, fromAddress, replyTo]
+          `INSERT INTO campaigns (${createFields.join(",")}) VALUES (${placeholders}) RETURNING id`,
+          createValues
         );
 
         await commandInteraction.editReply(`created campaign ${res.rows[0].id}`);
@@ -2032,6 +2101,7 @@ export const startDiscordBot = async (): Promise<void> => {
         const fromAddress = options.getString("from_address");
         const replyTo = options.getString("reply_to");
         const status = options.getString("status");
+        const smtpAccountEmail = options.getString("smtp_account_email");
 
         if (name) body.name = name;
         if (subject) body.subject = subject;
@@ -2040,6 +2110,7 @@ export const startDiscordBot = async (): Promise<void> => {
         if (fromAddress) body.from_address = fromAddress;
         if (replyTo) body.reply_to = replyTo;
         if (status) body.status = status;
+        if (smtpAccountEmail) body.smtp_account_email = smtpAccountEmail;
 
         if (Object.keys(body).length === 0) {
           await commandInteraction.editReply("no_fields_to_update");

@@ -3,7 +3,7 @@ import { createSendingWorker } from "./workers.js";
 import { SendingJobPayload } from "./types.js";
 import { createLogger } from "../logging/logger.js";
 import { loadConfig } from "../config/config.js";
-import { selectAvailableAccount, recordSend } from "../smtp/manager.js";
+import { selectAvailableAccount, selectAccountById, recordSend } from "../smtp/manager.js";
 import { sendMail } from "../smtp/sender.js";
 import { jobStore } from "../jobs/store.js";
 import { JobRepository } from "../db/repositories/jobs.js";
@@ -52,16 +52,10 @@ export const startSendingWorker = (): void => {
         let selected = null as any;
         const jobLevelSmtp = (job.data as any).smtpAccountId as string | undefined;
         if (jobLevelSmtp) {
-          // select specific account record with current window id
-          const repo = new (await import("../db/repositories/smtp.js")).SmtpRepository();
-          const accRes = await repo.pool.query(`SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts WHERE id = $1 LIMIT 1`, [jobLevelSmtp]);
-          if (accRes.rows[0] && accRes.rows[0].status === 'active') {
-            // construct a minimal SelectedAccount-like object
-            selected = { account: accRes.rows[0], windowId: null };
-          } else {
-            logger.warn("requested smtp account not available or inactive", { smtpAccountId: jobLevelSmtp });
-            // fall back to auto-selection
-            selected = await selectAvailableAccount();
+          selected = await selectAccountById(jobLevelSmtp);
+          if (!selected) {
+            logger.error("requested smtp account unavailable or inactive", { smtpAccountId: jobLevelSmtp });
+            throw new Error("requested_smtp_account_unavailable");
           }
         } else {
           selected = await selectAvailableAccount();

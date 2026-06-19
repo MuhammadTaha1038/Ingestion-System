@@ -304,7 +304,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const port = Number(body?.port ?? 587);
     const username = body?.username as string | undefined;
     const password = body?.password as string | undefined;
-    const useTls = typeof body?.useTls === "boolean" ? body.useTls : true;
+    const useTls = typeof body?.useTls === "boolean" ? body.useTls : port === 465;
     const maxPerWindow = Number(body?.maxPerWindow ?? 50);
     const maxConcurrent = Number(body?.maxConcurrent ?? 1);
 
@@ -629,6 +629,28 @@ export const registerRoutes = (server: FastifyInstance): void => {
       values.push(body.reply_to);
     }
 
+    if (typeof body.smtp_account_email === "string") {
+      const smtpRepo = new (await import("../../db/repositories/smtp.js")).SmtpRepository();
+      const ref = body.smtp_account_email.trim();
+      let found = null as any;
+      if (ref.includes("@")) {
+        const parts = ref.split("@");
+        const username = parts[0];
+        const host = parts.slice(1).join("@");
+        found = await smtpRepo.findByUsernameAndHost(username, host);
+      }
+      if (!found) {
+        found = await smtpRepo.findByUsername(ref);
+      }
+      if (!found) {
+        reply.code(400).send({ error: "smtp_account_email_not_found" });
+        return;
+      }
+
+      fields.push(`smtp_account_id = $${fields.length + 1}`);
+      values.push(found.id);
+    }
+
     if (typeof body.status === "string") {
       const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
       if (!allowedStatuses.has(body.status)) {
@@ -671,7 +693,13 @@ export const registerRoutes = (server: FastifyInstance): void => {
     }
 
     try {
-      const res = await (await import("../../db/pool.js")).getDatabasePool().query(`SELECT id,name,subject,status,created_at FROM campaigns ORDER BY created_at DESC LIMIT 50`);
+      const res = await (await import("../../db/pool.js")).getDatabasePool().query(
+        `SELECT c.id, c.name, c.subject, c.status, c.created_at, ea.address AS smtp_account_address
+         FROM campaigns c
+         LEFT JOIN smtp_accounts sa ON c.smtp_account_id = sa.id
+         LEFT JOIN email_accounts ea ON sa.email_account_id = ea.id
+         ORDER BY c.created_at DESC LIMIT 50`
+      );
       reply.send(ok({ campaigns: res.rows }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });

@@ -19,10 +19,12 @@ export const sendMail = async (
 
   const password = decrypt(row.password_encrypted);
 
+  const secure = row.port === 465;
   const transporter = nodemailer.createTransport({
     host: row.host,
     port: row.port,
-    secure: row.use_tls,
+    secure,
+    requireTLS: row.use_tls && !secure,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 30000,

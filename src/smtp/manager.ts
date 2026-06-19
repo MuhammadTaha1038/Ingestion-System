@@ -11,7 +11,7 @@ export interface SelectedAccount {
 }
 
 // Select an available SMTP account for the current sending window.
-export const selectAvailableAccount = async (): Promise<SelectedAccount | null> => {
+const getCurrentSendingWindow = async () => {
   const settings = await settingsRepo.getSettings();
   const window = getSendingWindowState(new Date(), {
     sendingWindowHours: settings.sending_window_hours,
@@ -20,15 +20,20 @@ export const selectAvailableAccount = async (): Promise<SelectedAccount | null> 
     sendingWindowStartMinute: settings.sending_window_start_minute,
     sendingWindowTz: settings.sending_window_tz
   });
-  const windowKey = window.windowKey;
-  const windowStart = window.windowStart;
-  const windowEnd = window.windowEnd;
-  const windowId = await repo.getOrCreateWindow(windowStart, windowEnd, windowKey);
+  return {
+    windowKey: window.windowKey,
+    windowStart: window.windowStart,
+    windowEnd: window.windowEnd
+  };
+};
+
+export const selectAvailableAccount = async (): Promise<SelectedAccount | null> => {
+  const windowState = await getCurrentSendingWindow();
+  const windowId = await repo.getOrCreateWindow(windowState.windowStart, windowState.windowEnd, windowState.windowKey);
 
   const accounts = await repo.listActiveAccounts();
   if (accounts.length === 0) return null;
 
-  // Find account with remaining quota (used < max_per_window).
   const candidates = [] as Array<{ account: SmtpAccountRecord; used: number }>;
 
   for (const acc of accounts) {
@@ -41,11 +46,26 @@ export const selectAvailableAccount = async (): Promise<SelectedAccount | null> 
 
   if (candidates.length === 0) return null;
 
-  // Prefer the account with the least used_count (simple rotation/load balancing)
   candidates.sort((a, b) => a.used - b.used);
   const selected = candidates[0].account;
 
   return { account: selected, windowId };
+};
+
+export const selectAccountById = async (smtpAccountId: string): Promise<SelectedAccount | null> => {
+  const windowState = await getCurrentSendingWindow();
+  const windowId = await repo.getOrCreateWindow(windowState.windowStart, windowState.windowEnd, windowState.windowKey);
+
+  const res = await repo.pool.query(
+    `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent
+     FROM smtp_accounts
+     WHERE id = $1 AND status = 'active' LIMIT 1`,
+    [smtpAccountId]
+  );
+
+  const account = res.rows[0] as SmtpAccountRecord | undefined;
+  if (!account) return null;
+  return { account, windowId };
 };
 
 export const recordSend = async (accountId: string, windowId: string, count = 1): Promise<void> => {
