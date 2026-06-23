@@ -606,8 +606,8 @@ export const registerRoutes = (server: FastifyInstance): void => {
       }
 
       const pool = await (await import("../../db/pool.js")).getDatabasePool();
-      const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
-      const createValues: unknown[] = [name, subject, bodyHtml, fromAddress, replyTo ?? null];
+      const createFields = ["name", "subject", "body_html", "reply_to"];
+      const createValues: unknown[] = [name, subject, bodyHtml, replyTo ?? null];
       if (smtpAccountId) {
         createFields.push("smtp_account_id");
         createValues.push(smtpAccountId);

@@ -174,10 +174,11 @@ These endpoints are intended to be used by the Discord control plane and adminis
 
 ### Managed via Discord
 
+- Name
 - Subject
 - Body (HTML + plain text fallback)
-- From address
 - Reply-to address
+- SMTP account email (optional)
 - The send worker uses the campaign sender fields at delivery time.
 
 ### Phase 1 Defaults
@@ -191,8 +192,15 @@ These endpoints are intended to be used by the Discord control plane and adminis
 
 Discord is the primary operational interface for all core operations.
 
+### Dashboard UI
+
+- `/dashboard` opens a button-based operational panel inside Discord.
+- The dashboard exposes ingestion, SMTP account management, campaign management, queue and status visibility, logs, window controls, and account usage.
+- Campaign actions include create, update, usage view, and delete workflows via Discord modals.
+
 ### Phase 1 Commands (Implemented)
 
+- /dashboard
 - /ingest
 - /status
 - /queue
@@ -208,6 +216,7 @@ Discord is the primary operational interface for all core operations.
 - /email-create
 - /email-list
 - /smtp-status
+- /smtp-import
 - /accounts-status
 - /smtp-create
 - /smtp-update

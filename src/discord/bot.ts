@@ -307,13 +307,6 @@ const createCampaignModal = () => {
     .setRequired(false)
     .setPlaceholder("user@example.com");
 
-  const fromAddress = new TextInputBuilder()
-    .setCustomId("from_address")
-    .setLabel("From address")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("sender@example.com");
-
   const bodyHtml = new TextInputBuilder()
     .setCustomId("body_html")
     .setLabel("HTML body")
@@ -328,7 +321,6 @@ const createCampaignModal = () => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(name),
       new ActionRowBuilder<TextInputBuilder>().addComponents(subject),
       new ActionRowBuilder<TextInputBuilder>().addComponents(smtpAccountEmail),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(fromAddress),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml)
     );
 };
@@ -347,7 +339,7 @@ const createCampaignUpdateModal = () => {
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setPlaceholder(
-      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, from_address, reply_to, smtp_account_email, status"
+      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, reply_to, smtp_account_email, status"
     );
 
   return new ModalBuilder()
@@ -425,10 +417,6 @@ const updateCampaignFromPatch = async (campaignId: string, patch: Record<string,
   if (typeof patch.body_html === "string") {
     fields.push(`body_html = $${fields.length + 1}`);
     values.push(patch.body_html);
-  }
-  if (typeof patch.from_address === "string") {
-    fields.push(`from_address = $${fields.length + 1}`);
-    values.push(patch.from_address);
   }
   if (typeof patch.reply_to === "string") {
     fields.push(`reply_to = $${fields.length + 1}`);
@@ -1590,7 +1578,7 @@ export const startDiscordBot = async (): Promise<void> => {
             name,
             subject,
             bodyHtml,
-            fromAddress,
+            fromAddress: "noreply@example.com",
             replyTo: null,
             status: null,
             smtpAccountEmail
@@ -2338,8 +2326,8 @@ if (interaction.customId === smtpCreateModalId || interaction.customId === smtpU
         }
 
         const pool = getDatabasePool();
-        const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
-        const createValues: unknown[] = [name, subject, bodyHtml, fromAddress, replyTo];
+        const createFields = ["name", "subject", "body_html", "reply_to"];
+        const createValues: unknown[] = [name, subject, bodyHtml, replyTo];
         if (smtpAccountId) {
           createFields.push("smtp_account_id");
           createValues.push(smtpAccountId);
@@ -2367,7 +2355,6 @@ if (interaction.customId === smtpCreateModalId || interaction.customId === smtpU
         const subject = options.getString("subject");
         const bodyHtml = options.getString("body_html");
         const bodyText = options.getString("body_text");
-        const fromAddress = options.getString("from_address");
         const replyTo = options.getString("reply_to");
         const status = options.getString("status");
         const smtpAccountEmail = options.getString("smtp_account_email");
@@ -2376,7 +2363,6 @@ if (interaction.customId === smtpCreateModalId || interaction.customId === smtpU
         if (subject) body.subject = subject;
         if (bodyHtml) body.body_html = bodyHtml;
         if (bodyText) body.body_text = bodyText;
-        if (fromAddress) body.from_address = fromAddress;
         if (replyTo) body.reply_to = replyTo;
         if (status) body.status = status;
         if (smtpAccountEmail) body.smtp_account_email = smtpAccountEmail;

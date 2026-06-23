@@ -24,6 +24,7 @@ Important:
 
 | Command | What it does | Example |
 |---|---|---|
+| `/dashboard` | Opens the Discord operations dashboard with button-based controls for ingestion, SMTP, campaign management, status, and logs. | `/dashboard` |
 | `/health` | Checks whether the service is running. | `/health` |
 | `/status` | Shows the latest job summary, or one specific job if you provide a job id. | `/status` or `/status job_id:<job-id>` |
 | `/queue` | Shows queue counts for ingestion and sending. | `/queue` |
@@ -89,14 +90,18 @@ Example:
 
 | Command | What it does | Example |
 |---|---|---|
-| `/campaign-create` | Creates a campaign. | `/campaign-create name:Promo subject:Hello body_html:<p>Hello</p> from_address:sender@example.com reply_to:reply@example.com` |
-| `/campaign-update` | Updates an existing campaign. | `/campaign-update id:<campaign-id> subject:New Subject status:active` |
+| `/campaign-create` | Creates a campaign. | `/campaign-create name:Promo subject:Hello body_html:<p>Hello</p> smtp_account_email:sender@example.com` |
+| `/campaign-update` | Updates an existing campaign. | `/campaign-update id:<campaign-id> subject:New Subject smtp_account_email:sender@example.com status:active` |
 | `/campaign-list` | Lists campaigns. | `/campaign-list` |
 | `/campaign-send` | Sends one campaign to one dataset only. `dataset_id` is required. | `/campaign-send id:<campaign-id> dataset_id:<dataset-id>` |
 
 Important campaign rules:
-- `from_address` is required when creating a campaign.
+- `subject` is required when creating a campaign.
+- `name` is required when creating a campaign.
+- `body_html` is required when creating a campaign.
 - `reply_to` is optional.
+- `smtp_account_email` is optional and can be used to bind the campaign to a specific SMTP account.
+- Campaign delete is available from the `/dashboard` button UI only.
 - When sending, you must provide `dataset_id`.
 - The campaign will only send to recipients from that dataset.
 
