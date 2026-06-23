@@ -339,7 +339,7 @@ const createCampaignUpdateModal = () => {
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setPlaceholder(
-      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, reply_to, smtp_account_email, status"
+      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, reply_to, smtp_account_email, status. from_address is not editable."
     );
 
   return new ModalBuilder()
@@ -385,11 +385,13 @@ const parseCampaignUpdateText = (text: string) => {
       case "name":
       case "subject":
       case "body_html":
-      case "from_address":
       case "reply_to":
       case "smtp_account_email":
       case "status":
         patch[key.trim().toLowerCase()] = value;
+        break;
+      case "from_address":
+        // from_address is not user-configurable, ignore updates
         break;
     }
   }
@@ -1566,10 +1568,9 @@ export const startDiscordBot = async (): Promise<void> => {
           const name = interaction.fields.getTextInputValue("name").trim();
           const subject = interaction.fields.getTextInputValue("subject").trim();
           const smtpAccountEmail = interaction.fields.getTextInputValue("smtp_account_email").trim() || null;
-          const fromAddress = interaction.fields.getTextInputValue("from_address").trim();
           const bodyHtml = interaction.fields.getTextInputValue("body_html").trim();
 
-          if (!name || !subject || !fromAddress || !bodyHtml) {
+          if (!name || !subject || !bodyHtml) {
             await interaction.editReply("missing_required_campaign_fields");
             return;
           }
@@ -2300,7 +2301,6 @@ if (interaction.customId === smtpCreateModalId || interaction.customId === smtpU
         const name = options.getString("name", true);
         const subject = options.getString("subject", true);
         const bodyHtml = options.getString("body_html", true);
-        const fromAddress = options.getString("from_address", true);
         const replyTo = options.getString("reply_to") ?? null;
         const smtpAccountEmail = options.getString("smtp_account_email") ?? undefined;
 
@@ -2326,8 +2326,8 @@ if (interaction.customId === smtpCreateModalId || interaction.customId === smtpU
         }
 
         const pool = getDatabasePool();
-        const createFields = ["name", "subject", "body_html", "reply_to"];
-        const createValues: unknown[] = [name, subject, bodyHtml, replyTo];
+        const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
+        const createValues: unknown[] = [name, subject, bodyHtml, "noreply@example.com", replyTo];
         if (smtpAccountId) {
           createFields.push("smtp_account_id");
           createValues.push(smtpAccountId);

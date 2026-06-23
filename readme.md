@@ -33,6 +33,12 @@ Set these in `.env`:
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_APP_ID`
 - `DISCORD_SERVER_ID`
+- optional: `DISCORD_DASHBOARD_CHANNEL_ID` to post the dashboard panel into a dedicated channel
+- optional: `DISCORD_STATUS_CHANNEL_ID` as fallback channel for the dashboard panel if no dedicated dashboard channel is set
+
+## Discord Dashboard
+
+Use `/dashboard` to open the Discord operations dashboard with buttons for ingestion, SMTP account management, campaign creation/update/delete, status, logs, and more.
 
 Optional for SMTP tests:
 

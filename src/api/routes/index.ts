@@ -572,7 +572,6 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const name = body?.name as string | undefined;
     const subject = body?.subject as string | undefined;
     const bodyHtml = body?.body_html as string | undefined;
-    const fromAddress = body?.from_address as string | undefined;
     const replyTo = body?.reply_to as string | undefined;
     const smtpAccountEmail = body?.smtp_account_email as string | undefined;
 
@@ -581,7 +580,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       return;
     }
 
-    if (!name || !subject || !bodyHtml || !fromAddress) {
+    if (!name || !subject || !bodyHtml) {
       reply.code(400).send({ error: "invalid_body" });
       return;
     }
@@ -660,10 +659,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
       values.push(body.body_text);
     }
 
-    if (typeof body.from_address === "string") {
-      fields.push(`from_address = $${fields.length + 1}`);
-      values.push(body.from_address);
-    }
+    // from_address is not user-configurable, skip if provided
 
     if (typeof body.reply_to === "string") {
       fields.push(`reply_to = $${fields.length + 1}`);

@@ -24,6 +24,10 @@ The deployment requires these environment variables, stored securely in `/opt/in
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_APP_ID`
 - `DISCORD_SERVER_ID`
+- optional: `DISCORD_DASHBOARD_CHANNEL_ID`
+- optional: `DISCORD_STATUS_CHANNEL_ID`
+
+> The Discord bot posts the dashboard panel to `DISCORD_DASHBOARD_CHANNEL_ID` when set. If that variable is not configured, it falls back to `DISCORD_STATUS_CHANNEL_ID`.
 - `NODE_ENV=production`
 
 > Do not store secrets in Git. Keep `.env` excluded from source control.

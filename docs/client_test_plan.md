@@ -58,6 +58,7 @@ Optional (for SMTP tests):
 
 - Start full stack:
   - `RUN_INGESTION_WORKER=true RUN_SENDING_WORKER=true RUN_WINDOW_RESETTER=true RUN_DISCORD_BOT=true npm run dev`
+- Use `/dashboard` in Discord to validate the button-based operations panel and campaign UI.
 
 ## 8) API Health Checks
 
