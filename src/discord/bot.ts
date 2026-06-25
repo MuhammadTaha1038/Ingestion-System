@@ -326,56 +326,27 @@ const createCampaignModal = () => {
 };
 
 const createCampaignUpdateModal = () => {
-  try {
-    const campaignId = new TextInputBuilder()
-      .setCustomId("campaign_id")
-      .setLabel("Campaign ID")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setPlaceholder("Select the campaign to update");
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Enter campaign ID");
 
-    logger.error("campaign_id field", {
-      customId: "campaign_id",
-      label: "Campaign ID",
-      placeholder: "Select the campaign to update"
-    });
+  const updates = new TextInputBuilder()
+    .setCustomId("updates")
+    .setLabel("Fields to update")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder("name=New Campaign\nsubject=New Subject\nstatus=active");
 
-    const updates = new TextInputBuilder()
-      .setCustomId("updates")
-      .setLabel("Fields to update")
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true)
-      .setPlaceholder(
-        "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
-      );
-
-    logger.error("updates field", {
-      customId: "updates",
-      label: "Fields to update",
-      placeholder: "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
-    });
-
-    const modal = new ModalBuilder()
-      .setCustomId(campaignUpdateModalId)
-      .setTitle("Update Campaign")
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
-      );
-
-    logger.error("modal created successfully", {
-      modalId: campaignUpdateModalId,
-      title: "Update Campaign"
-    });
-
-    return modal;
-  } catch (err: any) {
-    logger.error("createCampaignUpdateModal error", {
-      error: err?.message || String(err),
-      stack: err?.stack
-    });
-    throw err;
-  }
+  return new ModalBuilder()
+    .setCustomId(campaignUpdateModalId)
+    .setTitle("Update Campaign")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
+    );
 };
 
 const createCampaignDeleteModal = () => {
