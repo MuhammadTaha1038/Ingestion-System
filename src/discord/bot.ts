@@ -404,72 +404,87 @@ const updateCampaignFromPatch = async (campaignId: string, patch: Record<string,
     return "db_required";
   }
 
-  const pool = getDatabasePool();
-  const fields: string[] = [];
-  const values: unknown[] = [];
-
-  if (typeof patch.name === "string") {
-    fields.push(`name = $${fields.length + 1}`);
-    values.push(patch.name);
-  }
-  if (typeof patch.subject === "string") {
-    fields.push(`subject = $${fields.length + 1}`);
-    values.push(patch.subject);
-  }
-  if (typeof patch.body_html === "string") {
-    fields.push(`body_html = $${fields.length + 1}`);
-    values.push(patch.body_html);
-  }
-  if (typeof patch.reply_to === "string") {
-    fields.push(`reply_to = $${fields.length + 1}`);
-    values.push(patch.reply_to === "" ? null : patch.reply_to);
+  // Validate campaignId is a valid UUID
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(campaignId)) {
+    return "invalid_campaign_id_format";
   }
 
-  if (typeof patch.smtp_account_email === "string") {
-    const smtpRepo = new SmtpRepository();
-    const emailRef = patch.smtp_account_email.trim();
-    if (emailRef === "") {
-      fields.push("smtp_account_id = NULL");
-    } else {
-      let found = null as any;
-      if (emailRef.includes("@")) {
-        const parts = emailRef.split("@");
-        const username = parts[0];
-        const host = parts.slice(1).join("@");
-        found = await smtpRepo.findByUsernameAndHost(username, host);
-      }
-      if (!found) {
-        found = await smtpRepo.findByUsername(emailRef);
-      }
-      if (!found) {
-        return "smtp_account_email_not_found";
-      }
-      fields.push(`smtp_account_id = $${fields.length + 1}`);
-      values.push(found.id);
+  try {
+    const pool = getDatabasePool();
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    if (typeof patch.name === "string") {
+      const name = patch.name.slice(0, 500); // Limit field length
+      fields.push(`name = $${fields.length + 1}`);
+      values.push(name);
     }
-  }
-
-  if (typeof patch.status === "string") {
-    const status = patch.status.toLowerCase();
-    const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
-    if (!allowedStatuses.has(status)) {
-      return "invalid_status";
+    if (typeof patch.subject === "string") {
+      const subject = patch.subject.slice(0, 500); // Limit field length
+      fields.push(`subject = $${fields.length + 1}`);
+      values.push(subject);
     }
-    fields.push(`status = $${fields.length + 1}`);
-    values.push(status);
+    if (typeof patch.body_html === "string") {
+      const bodyHtml = patch.body_html.slice(0, 50000); // Limit field length
+      fields.push(`body_html = $${fields.length + 1}`);
+      values.push(bodyHtml);
+    }
+    if (typeof patch.reply_to === "string") {
+      const replyTo = patch.reply_to.slice(0, 500);
+      fields.push(`reply_to = $${fields.length + 1}`);
+      values.push(replyTo === "" ? null : replyTo);
+    }
+
+    if (typeof patch.smtp_account_email === "string") {
+      const smtpRepo = new SmtpRepository();
+      const emailRef = patch.smtp_account_email.trim().slice(0, 500);
+      if (emailRef === "") {
+        fields.push("smtp_account_id = NULL");
+      } else {
+        let found = null as any;
+        if (emailRef.includes("@")) {
+          const parts = emailRef.split("@");
+          const username = parts[0];
+          const host = parts.slice(1).join("@");
+          found = await smtpRepo.findByUsernameAndHost(username, host);
+        }
+        if (!found) {
+          found = await smtpRepo.findByUsername(emailRef);
+        }
+        if (!found) {
+          return "smtp_account_email_not_found";
+        }
+        fields.push(`smtp_account_id = $${fields.length + 1}`);
+        values.push(found.id);
+      }
+    }
+
+    if (typeof patch.status === "string") {
+      const status = patch.status.toLowerCase().slice(0, 50);
+      const allowedStatuses = new Set(["draft", "active", "paused", "archived"]);
+      if (!allowedStatuses.has(status)) {
+        return "invalid_status";
+      }
+      fields.push(`status = $${fields.length + 1}`);
+      values.push(status);
+    }
+
+    if (fields.length === 0) {
+      return "no_fields_to_update";
+    }
+
+    values.push(campaignId);
+    const res = await pool.query(
+      `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id`,
+      values
+    );
+
+    return res.rows[0] ? `updated campaign ${res.rows[0].id}` : "campaign_not_found";
+  } catch (err: any) {
+    logger.error("updateCampaignFromPatch error", { error: err?.message || String(err) });
+    return "update_failed";
   }
-
-  if (fields.length === 0) {
-    return "no_fields_to_update";
-  }
-
-  values.push(campaignId);
-  const res = await pool.query(
-    `UPDATE campaigns SET ${fields.join(", ")} WHERE id = $${values.length} RETURNING id`,
-    values
-  );
-
-  return res.rows[0] ? `updated campaign ${res.rows[0].id}` : "campaign_not_found";
 };
 
 const deleteCampaignById = async (campaignId: string): Promise<string> => {
@@ -1590,22 +1605,28 @@ export const startDiscordBot = async (): Promise<void> => {
 
         if (interaction.customId === campaignUpdateModalId) {
           await interaction.deferReply({ ephemeral: true });
-          const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
-          const updatesText = interaction.fields.getTextInputValue("updates").trim();
+          try {
+            const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
+            const updatesText = interaction.fields.getTextInputValue("updates").trim();
 
-          if (!campaignId) {
-            await interaction.editReply("campaign_id_required");
+            if (!campaignId) {
+              await interaction.editReply("campaign_id_required");
+              return;
+            }
+            if (!updatesText) {
+              await interaction.editReply("no_update_fields_provided");
+              return;
+            }
+
+            const patch = parseCampaignUpdateText(updatesText);
+            const message = await updateCampaignFromPatch(campaignId, patch);
+            await interaction.editReply(message);
+            return;
+          } catch (err: any) {
+            logger.error("campaign update failed", { error: err?.message || String(err) });
+            await interaction.editReply("update_failed_see_logs");
             return;
           }
-          if (!updatesText) {
-            await interaction.editReply("no_update_fields_provided");
-            return;
-          }
-
-          const patch = parseCampaignUpdateText(updatesText);
-          const message = await updateCampaignFromPatch(campaignId, patch);
-          await interaction.editReply(message);
-          return;
         }
 
         if (interaction.customId === campaignDeleteModalId) {
