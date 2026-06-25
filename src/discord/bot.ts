@@ -326,28 +326,57 @@ const createCampaignModal = () => {
 };
 
 const createCampaignUpdateModal = () => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("Select the campaign to update");
+  try {
+    const campaignId = new TextInputBuilder()
+      .setCustomId("campaign_id")
+      .setLabel("Campaign ID")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder("Select the campaign to update");
 
-  const updates = new TextInputBuilder()
-    .setCustomId("updates")
-    .setLabel("Fields to update")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setPlaceholder(
-      "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
-    );
+    logger.error("campaign_id field", {
+      customId: "campaign_id",
+      label: "Campaign ID",
+      placeholder: "Select the campaign to update"
+    });
 
-  return new ModalBuilder()
-    .setCustomId(campaignUpdateModalId)
-    .setTitle("Update Campaign")
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
+    const updates = new TextInputBuilder()
+      .setCustomId("updates")
+      .setLabel("Fields to update")
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true)
+      .setPlaceholder(
+        "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
+      );
+
+    logger.error("updates field", {
+      customId: "updates",
+      label: "Fields to update",
+      placeholder: "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
+    });
+
+    const modal = new ModalBuilder()
+      .setCustomId(campaignUpdateModalId)
+      .setTitle("Update Campaign")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
+      );
+
+    logger.error("modal created successfully", {
+      modalId: campaignUpdateModalId,
+      title: "Update Campaign"
+    });
+
+    return modal;
+  } catch (err: any) {
+    logger.error("createCampaignUpdateModal error", {
+      error: err?.message || String(err),
+      stack: err?.stack
+    });
+    throw err;
+  }
+};
     );
 };
 
@@ -1431,7 +1460,21 @@ export const startDiscordBot = async (): Promise<void> => {
         }
 
         if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-          await interaction.showModal(createCampaignUpdateModal());
+          try {
+            const modal = createCampaignUpdateModal();
+            logger.error("campaign update modal created", {
+              customId: modal.data.custom_id,
+              title: modal.data.title,
+              componentsCount: modal.data.components?.length || 0
+            });
+            await interaction.showModal(modal);
+          } catch (err: any) {
+            logger.error("campaign update modal error", { 
+              error: err?.message || String(err),
+              stack: err?.stack 
+            });
+            await interaction.reply({ content: "modal_creation_failed", ephemeral: true });
+          }
           return;
         }
 
