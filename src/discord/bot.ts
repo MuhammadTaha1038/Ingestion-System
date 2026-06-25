@@ -377,8 +377,6 @@ const createCampaignUpdateModal = () => {
     throw err;
   }
 };
-    );
-};
 
 const createCampaignDeleteModal = () => {
   const campaignId = new TextInputBuilder()
