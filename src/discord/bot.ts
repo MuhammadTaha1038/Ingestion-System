@@ -339,7 +339,7 @@ const createCampaignUpdateModal = () => {
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
     .setPlaceholder(
-      "Use key=value pairs, one per line. Supported keys: name, subject, body_html, reply_to, smtp_account_email, status. from_address is not editable."
+      "name=X, subject=X, body_html=X, reply_to=X, smtp_account_email=X, status=draft/active/paused/archived"
     );
 
   return new ModalBuilder()
