@@ -337,15 +337,23 @@ const createCampaignUpdateModal = () => {
     .setCustomId("updates")
     .setLabel("Fields to update")
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
+    .setRequired(false)
     .setPlaceholder("name=New Campaign\nsubject=New Subject\nstatus=active");
+
+  const bodyHtml = new TextInputBuilder()
+    .setCustomId("body_html")
+    .setLabel("HTML body (optional)")
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setPlaceholder("Paste HTML body here");
 
   return new ModalBuilder()
     .setCustomId(campaignUpdateModalId)
     .setTitle("Update Campaign")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(updates)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(updates),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml)
     );
 };
 
@@ -1620,17 +1628,22 @@ export const startDiscordBot = async (): Promise<void> => {
           try {
             const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
             const updatesText = interaction.fields.getTextInputValue("updates").trim();
+            const bodyHtmlUpdate = interaction.fields.getTextInputValue("body_html").trim();
 
             if (!campaignId) {
               await interaction.editReply("campaign_id_required");
               return;
             }
-            if (!updatesText) {
+            if (!updatesText && !bodyHtmlUpdate) {
               await interaction.editReply("no_update_fields_provided");
               return;
             }
 
             const patch = parseCampaignUpdateText(updatesText);
+            if (bodyHtmlUpdate) {
+              patch.body_html = bodyHtmlUpdate;
+            }
+
             const message = await updateCampaignFromPatch(campaignId, patch);
             await interaction.editReply(message);
             return;
