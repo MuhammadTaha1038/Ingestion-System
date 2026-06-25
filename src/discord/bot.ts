@@ -581,6 +581,8 @@ const createHierarchyModal = (mode: "cpanel" | "subdomain" | "email") => {
     );
 };
 
+const emailAddressRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const queueDashboardIngestion = async (args: {
   format?: string;
   content?: string;
@@ -591,6 +593,16 @@ const queueDashboardIngestion = async (args: {
 
   if (format !== "auto" && !allowedFormats.has(format)) {
     return "invalid_format";
+  }
+
+  let directEmailIngest = false;
+  if (!(args.content ?? "").trim() && args.sourcePath) {
+    const trimmedSource = args.sourcePath.trim();
+    if (emailAddressRegex.test(trimmedSource)) {
+      args.content = trimmedSource;
+      args.sourcePath = undefined;
+      directEmailIngest = true;
+    }
   }
 
   if (!(args.content ?? "").trim() && !args.sourcePath) {
@@ -649,9 +661,11 @@ const queueDashboardIngestion = async (args: {
   );
 
   return [
-    "File accepted.",
+    directEmailIngest ? `Email ${args.content?.trim()} accepted for ingest.` : "File accepted.",
     "Processing has started.",
-    "When ingestion completes, Status will show fetched, added, duplicate, and error counts for this file.",
+    directEmailIngest
+      ? "This input is being treated as a single email address and will be ingested directly."
+      : "When ingestion completes, Status will show fetched, added, duplicate, and error counts for this file.",
     args.campaignId
       ? `This ingest will use campaign ${args.campaignId} if the campaign exists.`
       : "If an active campaign exists, auto-send will be queued automatically.",
