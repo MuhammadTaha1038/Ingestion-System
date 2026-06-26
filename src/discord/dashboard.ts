@@ -10,6 +10,12 @@ export const ingestModalId = "dashboard:ingest-modal";
 export const campaignCreateModalId = "dashboard:campaign-create-modal";
 export const campaignUpdateModalId = "dashboard:campaign-update-modal";
 export const campaignDeleteModalId = "dashboard:campaign-delete-modal";
+export const campaignSelectModalId = "dashboard:campaign-select-modal";
+export const campaignViewModalId = "dashboard:campaign-view-modal";
+export const datasetSelectModalId = "dashboard:dataset-select-modal";
+export const addTestRecipientModalId = "dashboard:add-test-recipient-modal";
+export const useTestRecipientModalId = "dashboard:use-test-recipient-modal";
+export const runCampaignModalId = "dashboard:run-campaign-modal";
 export const smtpCreateModalId = "dashboard:smtp-create-modal";
 export const smtpUpdateModalId = "dashboard:smtp-update-modal";
 export const smtpDeleteModalId = "dashboard:smtp-delete-modal";
@@ -20,34 +26,45 @@ export const emailCreateModalId = "dashboard:email-create-modal";
 
 export const dashboardButtonIds = {
   ingest: "dashboard:ingest",
+  ingestNewList: "dashboard:ingest-new-list",
   queue: "dashboard:queue",
-  send: "dashboard:send",
   logs: "dashboard:logs",
+  logsStatus: "dashboard:logs-status",
+  status: "dashboard:status",
+  campaigns: "dashboard:campaigns",
+  campaignList: "dashboard:campaign-list",
+  campaignSelect: "dashboard:campaign-select",
+  campaignView: "dashboard:campaign-view",
+  campaignUpdate: "dashboard:campaign-update",
+  campaignCreate: "dashboard:campaign-create",
+  campaignDelete: "dashboard:campaign-delete",
+  datasetList: "dashboard:dataset-list",
+  datasetSelect: "dashboard:dataset-select",
+  addTestRecipient: "dashboard:add-test-recipient",
+  useTestRecipient: "dashboard:use-test-recipient",
+  sendTest: "dashboard:send-test",
+  runCampaign: "dashboard:run-campaign",
+  send: "dashboard:send",
   smtpList: "dashboard:smtp-list",
+  smtpFailures: "dashboard:smtp-failures",
+  smtpUsage: "dashboard:smtp-usage",
   smtpCreate: "dashboard:smtp-create",
   smtpUpdate: "dashboard:smtp-update",
   smtpDelete: "dashboard:smtp-delete",
   smtpImport: "dashboard:smtp-import",
-  smtpFailures: "dashboard:smtp-failures",
-  smtpUsage: "dashboard:smtp-usage",
-  accounts: "dashboard:accounts",
-  health: "dashboard:health",
-  status: "dashboard:status",
-  window: "dashboard:window",
-  campaigns: "dashboard:campaigns",
-  campaignCreate: "dashboard:campaign-create",
-  campaignUpdate: "dashboard:campaign-update",
-  campaignDelete: "dashboard:campaign-delete",
-  campaignUsage: "dashboard:campaign-usage",
-  cpanelCreate: "dashboard:cpanel-create",
-  subdomainCreate: "dashboard:subdomain-create",
-  emailCreate: "dashboard:email-create",
-  cpanelList: "dashboard:cpanel-list",
-  subdomainList: "dashboard:subdomain-list",
-  emailList: "dashboard:email-list",
   storage: "dashboard:storage",
   pause: "dashboard:pause",
-  resume: "dashboard:resume"
+  resume: "dashboard:resume",
+  accounts: "dashboard:accounts",
+  health: "dashboard:health",
+  window: "dashboard:window",
+  cpanelList: "dashboard:cpanel-list",
+  cpanelCreate: "dashboard:cpanel-create",
+  subdomainList: "dashboard:subdomain-list",
+  subdomainCreate: "dashboard:subdomain-create",
+  emailList: "dashboard:email-list",
+  emailCreate: "dashboard:email-create",
+  campaignUsage: "dashboard:campaign-usage"
 } as const;
 
 export const getDashboardChannelId = (): string | undefined => {
@@ -87,15 +104,38 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
       return;
     }
 
-    await channel.send({
-      content: [
-        "Discord operations dashboard",
-        "Use these buttons for the primary operational interface.",
-        "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here."
-      ].join("\n"),
-      components: createDashboardComponents()
-    });
-    logger.info("discord dashboard panel posted", { channelId: channel.id });
+    const content = [
+      "Discord operations dashboard",
+      "Use these buttons for the primary operational interface.",
+      "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here."
+    ].join("\n");
+
+    const components = createDashboardComponents();
+
+    try {
+      // Try to find an existing dashboard message posted by this bot so we can update it
+      const fetched = await channel.messages.fetch({ limit: 100 });
+      const existing = fetched.find((m) => m.author?.id === client.user?.id && (
+        (typeof m.content === "string" && m.content.includes("Discord operations dashboard")) ||
+        (Array.isArray(m.components) && m.components.length > 0)
+      ));
+
+      if (existing) {
+        await existing.edit({ content, components });
+        logger.info("discord dashboard panel updated", { channelId: channel.id, messageId: existing.id });
+      } else {
+        const sent = await channel.send({ content, components });
+        logger.info("discord dashboard panel posted", { channelId: channel.id, messageId: sent.id });
+      }
+    } catch (err: any) {
+      // Fallback to sending a new message if fetch/edit fails for permissions or other reasons
+      try {
+        const sent = await channel.send({ content, components });
+        logger.info("discord dashboard panel posted (fallback)", { channelId: channel.id, messageId: sent.id, error: String(err) });
+      } catch (err2: any) {
+        logger.warn("failed to post or update discord dashboard panel", { error: String(err2) });
+      }
+    }
   } catch (error) {
     logger.warn("failed to post discord dashboard panel", { error: String(error) });
   }
@@ -104,38 +144,38 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
 export const createDashboardComponents = () => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.ingest).setLabel("Ingest Data").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaigns).setLabel("Campaigns").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.send).setLabel("Start Sending").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.ingestNewList).setLabel("Ingest New Recipient List").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.datasetList).setLabel("View Datasets").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.datasetSelect).setLabel("Select Dataset").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.status).setLabel("Status").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignList).setLabel("View Campaigns").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignSelect).setLabel("Select Campaign").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignView).setLabel("View Campaign").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Create Campaign").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignDelete).setLabel("Delete Campaign").setStyle(ButtonStyle.Danger)
+  ),
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Edit Campaign").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.runCampaign).setLabel("Run Campaign").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.send).setLabel("Start Sending").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.sendTest).setLabel("Send Test Email").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.addTestRecipient).setLabel("Add Test Recipient").setStyle(ButtonStyle.Secondary)
+  ),
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(dashboardButtonIds.useTestRecipient).setLabel("Use Test Recipient").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpUpdate).setLabel("SMTP Update").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.storage).setLabel("Storage").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelList).setLabel("cPanel List").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.cpanelCreate).setLabel("cPanel Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainList).setLabel("Subdomain List").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.subdomainCreate).setLabel("Subdomain Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUpdate).setLabel("Campaign Update").setStyle(ButtonStyle.Secondary)
-  ),
-  new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(dashboardButtonIds.emailCreate).setLabel("Email Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.health).setLabel("Health").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.window).setLabel("Window").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.logs).setLabel("Logs").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.health).setLabel("Health").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.campaignUsage).setLabel("Campaign Usage").setStyle(ButtonStyle.Secondary)
-  ),
-  new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(dashboardButtonIds.pause).setLabel("Pause").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.resume).setLabel("Resume").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.accounts).setLabel("Accounts").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignCreate).setLabel("Campaign Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.campaignDelete).setLabel("Campaign Delete").setStyle(ButtonStyle.Danger)
   )
 ];
 
@@ -166,6 +206,102 @@ export const createIngestModal = () => {
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(sourcePath),
       new ActionRowBuilder<TextInputBuilder>().addComponents(format),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
+    );
+};
+
+export const createDatasetSelectModal = () => {
+  const datasetId = new TextInputBuilder()
+    .setCustomId("dataset_id")
+    .setLabel("Dataset ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Enter dataset id to view details");
+
+  return new ModalBuilder()
+    .setCustomId("dashboard:dataset-select-modal")
+    .setTitle("Select Dataset")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(datasetId)
+    );
+};
+
+export const createCampaignDetailsModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Enter campaign id to view details");
+
+  return new ModalBuilder()
+    .setCustomId("dashboard:campaign-view-modal")
+    .setTitle("View Campaign")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
+    );
+};
+
+export const createRunCampaignModal = () => {
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Campaign id to run");
+
+  const datasetId = new TextInputBuilder()
+    .setCustomId("dataset_id")
+    .setLabel("Dataset ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Dataset id to use");
+
+  return new ModalBuilder()
+    .setCustomId("dashboard:run-campaign-modal")
+    .setTitle("Run Campaign")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(datasetId)
+    );
+};
+
+export const createAddTestRecipientModal = () => {
+  const email = new TextInputBuilder()
+    .setCustomId("email_address")
+    .setLabel("Test recipient email")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("user@example.com");
+
+  return new ModalBuilder()
+    .setCustomId("dashboard:add-test-recipient-modal")
+    .setTitle("Add Test Recipient")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(email)
+    );
+};
+
+export const createSendTestModal = () => {
+  const email = new TextInputBuilder()
+    .setCustomId("email_address")
+    .setLabel("Test email recipient")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder("Leave empty to use latest test recipient");
+
+  const campaignId = new TextInputBuilder()
+    .setCustomId("campaign_id")
+    .setLabel("Campaign ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder("Optional campaign id");
+
+  return new ModalBuilder()
+    .setCustomId("dashboard:send-test-modal")
+    .setTitle("Send Test Email")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(email),
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
     );
 };
