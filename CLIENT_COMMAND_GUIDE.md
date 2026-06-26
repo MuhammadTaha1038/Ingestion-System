@@ -33,6 +33,17 @@ Important:
 | `/pause` | Pauses ingestion and sending queues. | `/pause` |
 | `/resume` | Resumes ingestion and sending queues. | `/resume` |
 
+### Dashboard buttons
+
+Use `/dashboard` to open the button-driven control panel. The panel includes the key flows for datasets, campaigns, and SMTP operations, including:
+- Ingest Data, Ingest New Recipient List, View Datasets, Select Dataset
+- View Campaigns, Select Campaign, View Campaign, Create Campaign, Edit Campaign, Delete Campaign
+- Run Campaign, Send Test Email, Add Test Recipient, Use Test Recipient
+- SMTP List, SMTP Create, SMTP Import
+- Queue, Window, Logs, Health, Storage, Campaign Usage
+
+For campaign send operations, you can use `/campaign-send` directly, or use `/dashboard` and the Run Campaign button with a selected dataset.
+
 ### Sending window
 
 | Command | What it does | Example |

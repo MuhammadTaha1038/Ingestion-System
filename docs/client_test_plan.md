@@ -111,6 +111,7 @@ Optional (for SMTP tests):
 ## 13) Discord Bot Test
 
 - In Discord, verify slash commands:
+  - /dashboard
   - /ingest
   - /health
   - /status
@@ -119,18 +120,36 @@ Optional (for SMTP tests):
   - /logs
   - /pause
   - /resume
+  - /window-show
+  - /window-update
+  - /cpanel-create
+  - /cpanel-list
+  - /subdomain-create
+  - /subdomain-list
+  - /email-create
+  - /email-list
   - /smtp-status
+  - /smtp-import
+  - /smtp-list
   - /accounts-status
-  - /smtp-usage
-  - /smtp-failures
+  - /smtp-create
+  - /smtp-update
   - /smtp-disable
   - /smtp-enable
+  - /smtp-usage
+  - /smtp-failures
   - /job-status
   - /campaign-list
   - /campaign-create
   - /campaign-update
   - /campaign-send
 - Confirm results match API state
+- Verify `/dashboard` opens the button panel and that the primary dataset/campaign buttons are present.
+- Use `/dashboard` buttons to test:
+  - View Datasets and Select Dataset
+  - View Campaigns, Select Campaign, View Campaign
+  - Run Campaign
+  - Add Test Recipient and Send Test Email
 
 Discord ingest notes:
 - `/ingest` accepts inline `content`, `source_path`, or an attached file URL via `file`.
