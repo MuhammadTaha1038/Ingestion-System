@@ -349,7 +349,8 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       `Subject: ${campaign.subject}`,
       `SMTP: ${campaign.smtp_account_email ?? "none"}`,
       `Reply-to: ${campaign.reply_to ?? "none"}`,
-      `Body html length: ${campaign.body_html.length}`
+      "Body HTML:",
+      campaign.body_html
     ].join("\n")));
     return;
   }

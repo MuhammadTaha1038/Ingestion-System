@@ -373,9 +373,9 @@ export const createCampaignModal = () => {
 export const createCampaignUpdateModal = (campaignId?: string) => {
   const updates = new TextInputBuilder()
     .setCustomId("updates")
-    .setLabel("Fields to update")
+    .setLabel("Fields to update (optional)")
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
+    .setRequired(false)
     .setPlaceholder("name=New Campaign subject=New Subject status=active");
 
   const bodyHtml = new TextInputBuilder()
