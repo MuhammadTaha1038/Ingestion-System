@@ -1,4 +1,4 @@
-import { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuInteraction } from "discord.js";
 import { loadConfig } from "../config/config.js";
 import { createLogger, getRecentLogs } from "../logging/logger.js";
 import { DatasetRepository } from "../db/repositories/datasets.js";
@@ -498,18 +498,34 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   if (interaction.customId === dashboardButtonIds.campaignUpdate) {
-    try {
-      const modal = createCampaignUpdateModal();
-      logger.info("campaign update modal created", {
-        customId: modal.data.custom_id,
-        title: modal.data.title,
-        componentsCount: modal.data.components?.length || 0
-      });
-      await interaction.showModal(modal);
-    } catch (err: any) {
-      logger.error("campaign update modal error", { error: err?.message || String(err), stack: err?.stack });
-      await interaction.reply({ content: "modal_creation_failed", ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
     }
+
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    if (!res.rows || res.rows.length === 0) {
+      await interaction.editReply("No campaigns found.");
+      return;
+    }
+
+    const options = res.rows.map((r: any) => ({
+      label: String(r.name || r.id).slice(0, 100),
+      value: r.id,
+      description: String(r.name ? `ID: ${r.id}` : `Campaign ${r.id}`).slice(0, 100)
+    }));
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(dashboardButtonIds.campaignUpdateSelect)
+      .setPlaceholder("Choose a campaign to edit")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(...options);
+
+    const rows = [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)];
+    await interaction.editReply({ content: "Select a campaign to update:", components: rows });
     return;
   }
 
@@ -690,10 +706,12 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
     return;
   }
 
-  if (interaction.customId === campaignUpdateModalId) {
+  if (interaction.customId.startsWith(campaignUpdateModalId)) {
     await interaction.deferReply({ ephemeral: true });
     try {
-      const campaignId = interaction.fields.getTextInputValue("campaign_id").trim();
+      const campaignId = interaction.customId === campaignUpdateModalId
+        ? interaction.fields.getTextInputValue("campaign_id").trim()
+        : interaction.customId.slice(campaignUpdateModalId.length + 1);
       const updatesText = interaction.fields.getTextInputValue("updates").trim();
       const bodyHtmlUpdate = interaction.fields.getTextInputValue("body_html").trim();
 
@@ -1516,10 +1534,22 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
   await commandInteraction.editReply("unhandled_command");
 };
 
-export const handleSelectMenu = async (interaction: any): Promise<void> => {
+export const handleSelectMenu = async (interaction: StringSelectMenuInteraction): Promise<void> => {
   try {
+    if (interaction.customId === dashboardButtonIds.campaignUpdateSelect) {
+      const campaignId = interaction.values?.[0];
+      if (!campaignId) {
+        await interaction.reply({ content: "campaign_id_required", ephemeral: true });
+        return;
+      }
+
+      const modal = createCampaignUpdateModal(campaignId);
+      await interaction.showModal(modal);
+      return;
+    }
+
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ content: "select_menu_not_implemented", ephemeral: true });
+      await interaction.editReply("select_menu_not_implemented");
     } else {
       await interaction.reply({ content: "select_menu_not_implemented", ephemeral: true });
     }

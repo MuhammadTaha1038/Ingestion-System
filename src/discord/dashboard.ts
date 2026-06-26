@@ -36,6 +36,7 @@ export const dashboardButtonIds = {
   campaignSelect: "dashboard:campaign-select",
   campaignView: "dashboard:campaign-view",
   campaignUpdate: "dashboard:campaign-update",
+  campaignUpdateSelect: "dashboard:campaign-update-select",
   campaignCreate: "dashboard:campaign-create",
   campaignDelete: "dashboard:campaign-delete",
   datasetList: "dashboard:dataset-list",
@@ -369,14 +370,7 @@ export const createCampaignModal = () => {
     );
 };
 
-export const createCampaignUpdateModal = () => {
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder("Enter campaign ID");
-
+export const createCampaignUpdateModal = (campaignId?: string) => {
   const updates = new TextInputBuilder()
     .setCustomId("updates")
     .setLabel("Fields to update")
@@ -391,14 +385,15 @@ export const createCampaignUpdateModal = () => {
     .setRequired(false)
     .setPlaceholder("Optional HTML body update");
 
-  return new ModalBuilder()
-    .setCustomId("dashboard:campaign-update-modal")
+  const modal = new ModalBuilder()
+    .setCustomId(campaignId ? `${campaignUpdateModalId}:${campaignId}` : campaignUpdateModalId)
     .setTitle("Update Campaign")
     .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(updates),
       new ActionRowBuilder<TextInputBuilder>().addComponents(bodyHtml)
     );
+
+  return modal;
 };
 
 export const createCampaignDeleteModal = () => {
