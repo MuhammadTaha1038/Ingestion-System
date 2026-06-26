@@ -64,4 +64,26 @@ export class DatasetRepository {
       id
     ]);
   }
+
+  async listAllDatasets(): Promise<Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>> {
+    const result = await this.pool.query(
+      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+       FROM datasets
+       ORDER BY created_at DESC
+       LIMIT 20`
+    );
+
+    return result.rows as Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
+  }
+
+  async getDatasetById(id: string): Promise<{ id: string; source_type: string; source_path: string; status: string; raw_count: number | null; valid_count: number | null; duplicate_count: number | null; error_count: number | null; processed_path: string | null; report_path: string | null; created_at: string } | null> {
+    const result = await this.pool.query(
+      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, processed_path, report_path, created_at
+       FROM datasets
+       WHERE id = $1 LIMIT 1`,
+      [id]
+    );
+
+    return result.rows[0] ?? null;
+  }
 }

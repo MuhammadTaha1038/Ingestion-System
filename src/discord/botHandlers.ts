@@ -248,8 +248,14 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
 
-    const repo = new DatasetRepository();
-    const list = await repo.listAllDatasets();
+    const pool = getDatabasePool();
+    const res = await pool.query(
+      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+       FROM datasets
+       ORDER BY created_at DESC
+       LIMIT 25`
+    );
+    const list = res.rows as Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
     if (list.length === 0) {
       await interaction.editReply("No datasets found.");
       return;

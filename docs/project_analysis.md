@@ -112,15 +112,44 @@ The sending worker:
 
 ### 3.5 Discord support
 
-The Discord bot can currently register and handle only a small set of commands:
+The Discord bot now registers and handles a broad operational command set, including ingestion, queue visibility, health, logs, pause/resume, metrics, window controls, hierarchy creation, SMTP account management, campaign lifecycle actions, and bulk SMTP import.
 
+Implemented commands include:
+
+- `dashboard`
+- `ingest`
+- `health`
+- `status`
+- `queue`
+- `logs`
+- `pause`
+- `resume`
+- `metrics`
+- `window-show`
+- `window-update`
+- `cpanel-create`
+- `cpanel-list`
+- `subdomain-create`
+- `subdomain-list`
+- `email-create`
+- `email-list`
+- `smtp-status`
+- `smtp-import`
 - `smtp-list`
+- `accounts-status`
+- `smtp-create`
+- `smtp-update`
 - `smtp-disable`
 - `smtp-enable`
+- `smtp-usage`
+- `smtp-failures`
 - `job-status`
+- `campaign-create`
+- `campaign-update`
+- `campaign-list`
 - `campaign-send`
 
-That is not the full control plane described in the planning docs, so Discord is a real remaining gap.
+This is a much wider Discord surface than earlier drafts suggested, but the planning docs still identify additional campaign and deliverability refinements that are not yet complete.
 
 ## 4. What is missing or only partially done
 

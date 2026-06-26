@@ -202,13 +202,15 @@ Discord is the primary operational interface for all core operations.
 
 - /dashboard
 - /ingest
+- /health
 - /status
 - /queue
 - /logs
 - /pause
 - /resume
-- /health
 - /metrics
+- /window-show
+- /window-update
 - /cpanel-create
 - /cpanel-list
 - /subdomain-create
@@ -217,6 +219,7 @@ Discord is the primary operational interface for all core operations.
 - /email-list
 - /smtp-status
 - /smtp-import
+- /smtp-list
 - /accounts-status
 - /smtp-create
 - /smtp-update
