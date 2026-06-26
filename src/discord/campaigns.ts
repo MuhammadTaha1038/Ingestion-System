@@ -49,7 +49,6 @@ export const saveCampaignFromModal = async (args: {
   name: string;
   subject: string;
   bodyHtml: string;
-  fromAddress: string;
   replyTo?: string | null;
   status?: string | null;
   smtpAccountEmail?: string | null;
@@ -87,8 +86,8 @@ export const saveCampaignFromModal = async (args: {
   }
 
   if (args.campaignId) {
-    const fields = ["name = $1", "subject = $2", "body_html = $3", "from_address = $4", "reply_to = $5"];
-    const values: unknown[] = [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null];
+    const fields = ["name = $1", "subject = $2", "body_html = $3", "reply_to = $4"];
+    const values: unknown[] = [args.name, args.subject, args.bodyHtml, args.replyTo ?? null];
     if (status) {
       fields.push(`status = $${fields.length + 1}`);
       values.push(status);
@@ -103,8 +102,8 @@ export const saveCampaignFromModal = async (args: {
     return res.rows[0] ? `updated campaign ${res.rows[0].id}` : "campaign_not_found";
   }
 
-  const createFields = ["name", "subject", "body_html", "from_address", "reply_to"];
-  const createValues: unknown[] = [args.name, args.subject, args.bodyHtml, args.fromAddress, args.replyTo ?? null];
+  const createFields = ["name", "subject", "body_html", "reply_to"];
+  const createValues: unknown[] = [args.name, args.subject, args.bodyHtml, args.replyTo ?? null];
   if (status) {
     createFields.push("status");
     createValues.push(status);

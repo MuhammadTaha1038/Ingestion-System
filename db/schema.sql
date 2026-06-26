@@ -22,7 +22,6 @@ CREATE TABLE campaigns (
   subject text NOT NULL,
   body_html text NOT NULL,
   body_text text,
-  from_address text NOT NULL,
   reply_to text,
   status text NOT NULL DEFAULT 'draft',
   created_at timestamptz NOT NULL DEFAULT now(),

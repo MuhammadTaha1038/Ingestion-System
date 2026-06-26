@@ -348,7 +348,6 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       `Status: ${campaign.status}`,
       `Subject: ${campaign.subject}`,
       `SMTP: ${campaign.smtp_account_email ?? "none"}`,
-      `From: ${campaign.from_address}`,
       `Reply-to: ${campaign.reply_to ?? "none"}`,
       `Body html length: ${campaign.body_html.length}`
     ].join("\n")));
@@ -683,7 +682,6 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       name,
       subject,
       bodyHtml,
-      fromAddress: "noreply@example.com",
       replyTo: null,
       status: null,
       smtpAccountEmail
@@ -801,7 +799,6 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       `Status: ${campaign.status}`,
       `Subject: ${campaign.subject}`,
       `SMTP: ${campaign.smtp_account_email ?? "none"}`,
-      `From: ${campaign.from_address}`,
       `Reply-to: ${campaign.reply_to ?? "none"}`,
       `Body html length: ${campaign.body_html.length}`
     ].join("\n")));
@@ -1457,7 +1454,6 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
       name,
       subject,
       bodyHtml,
-      fromAddress: "noreply@example.com",
       replyTo,
       status: null,
       smtpAccountEmail

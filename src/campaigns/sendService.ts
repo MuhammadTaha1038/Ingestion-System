@@ -12,7 +12,6 @@ export interface CampaignSendDefinition {
   subject: string;
   body_html: string;
   body_text: string | null;
-  from_address: string;
   reply_to: string | null;
   smtp_account_id?: string | null;
   smtp_account_email?: string | null;
@@ -23,7 +22,7 @@ const getPool = (pool?: Pool): Pool => pool ?? getDatabasePool();
 export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefinition | null> => {
   const database = getPool(pool);
   const res = await database.query(
-    `SELECT c.id, c.subject, c.body_html, c.body_text, c.from_address, c.reply_to, c.smtp_account_id,
+    `SELECT c.id, c.subject, c.body_html, c.body_text, c.reply_to, c.smtp_account_id,
             ea.address AS smtp_account_email
      FROM campaigns c
      LEFT JOIN smtp_accounts sa ON c.smtp_account_id = sa.id
@@ -39,7 +38,7 @@ export const selectAutoCampaign = async (pool?: Pool): Promise<CampaignSendDefin
 export const selectCampaignById = async (campaignId: string, pool?: Pool): Promise<CampaignSendDefinition | null> => {
   const database = getPool(pool);
   const res = await database.query(
-    `SELECT c.id, c.name, c.status, c.subject, c.body_html, c.body_text, c.from_address, c.reply_to, c.smtp_account_id,
+    `SELECT c.id, c.name, c.status, c.subject, c.body_html, c.body_text, c.reply_to, c.smtp_account_id,
             ea.address AS smtp_account_email
      FROM campaigns c
      LEFT JOIN smtp_accounts sa ON c.smtp_account_id = sa.id
@@ -94,7 +93,7 @@ export const enqueueCampaignSendForDataset = async (args: {
       {
         campaignId: args.campaign.id,
         windowId: "",
-        fromAddress: args.campaign.from_address,
+        fromAddress: args.campaign.smtp_account_email ?? undefined,
         replyTo: args.campaign.reply_to ?? undefined,
         recipients: batch,
         smtpAccountId: (args.campaign as any).smtp_account_id ?? undefined
