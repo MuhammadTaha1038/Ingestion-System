@@ -114,6 +114,12 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
+  if (interaction.customId === dashboardButtonIds.ingestNewList) {
+    // Ingest new recipient list uses the same ingest modal but is labeled differently in the dashboard
+    await interaction.showModal(createIngestModal());
+    return;
+  }
+
   if (interaction.customId === dashboardButtonIds.queue) {
     await interaction.deferReply({ ephemeral: true });
     const queueStatus = await getQueueStatus();
@@ -615,6 +621,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
   await interaction.reply({ content: "unhandled_button", ephemeral: true });
 };
+
+// Ensure unhandled interactions are logged for easier debugging
+process.on("unhandledRejection", (reason) => {
+  logger.warn("unhandled rejection in discord handlers", { reason: String(reason) });
+});
 
 const formatCommandJobStatus = (job: { id: string; type: string; status: string; payload?: Record<string, unknown>; createdAt: string; updatedAt: string; progress: { processed: number; total: number; failed: number } }): string => {
   return [
