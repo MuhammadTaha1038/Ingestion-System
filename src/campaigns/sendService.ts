@@ -58,7 +58,7 @@ export const enqueueCampaignSendForDataset = async (args: {
 }): Promise<{ queued: number; campaignId: string; recipients: number }> => {
   const database = getPool(args.pool);
   const res = await database.query(
-    `SELECT r.email_normalized FROM recipients r WHERE r.first_dataset_id = $1 ORDER BY r.email_normalized ASC`,
+    `SELECT email_normalized FROM dataset_recipients WHERE dataset_id = $1 ORDER BY email_normalized ASC`,
     [args.datasetId]
   );
 

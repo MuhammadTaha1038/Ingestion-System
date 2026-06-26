@@ -16,22 +16,21 @@ export class PostgresDedupStore implements DedupStore {
 
   async checkAndInsert(emailNormalized: string, datasetId?: string | null): Promise<boolean> {
     const domain = getEmailDomain(emailNormalized);
+    if (!datasetId) {
+      const result = await this.pool.query(
+        "INSERT INTO recipients (email_normalized, email_domain, first_dataset_id) VALUES ($1, $2, NULL) ON CONFLICT (email_normalized) DO NOTHING",
+        [emailNormalized, domain]
+      );
+      return result.rowCount === 1;
+    }
+
     const result = await this.pool.query(
-      "INSERT INTO recipients (email_normalized, email_domain, first_dataset_id) VALUES ($1, $2, $3) ON CONFLICT (email_normalized) DO NOTHING",
-      [emailNormalized, domain, datasetId ?? null]
+      `INSERT INTO dataset_recipients (dataset_id, email_normalized, email_domain, metadata)
+       VALUES ($1, $2, $3, '{}'::jsonb)
+       ON CONFLICT (dataset_id, email_normalized) DO NOTHING`,
+      [datasetId, emailNormalized, domain]
     );
 
-    if (result.rowCount === 1) {
-      return true;
-    }
-
-    if (datasetId) {
-      await this.pool.query(
-        "UPDATE recipients SET first_dataset_id = COALESCE(first_dataset_id, $2) WHERE email_normalized = $1",
-        [emailNormalized, datasetId]
-      );
-    }
-
-    return false;
+    return result.rowCount === 1;
   }
 }
