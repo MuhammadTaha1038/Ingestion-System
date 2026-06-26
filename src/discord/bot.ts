@@ -28,6 +28,13 @@ export const startDiscordBot = async (): Promise<void> => {
                 return;
             }
 
+            if (interaction.isStringSelectMenu && interaction.isStringSelectMenu()) {
+                // handle selection menus (campaign/dataset choices)
+                const { handleSelectMenu } = await import("./botHandlers.js");
+                await handleSelectMenu(interaction);
+                return;
+            }
+
             if (interaction.isModalSubmit()) {
                 await handleModalSubmit(interaction);
                 return;
