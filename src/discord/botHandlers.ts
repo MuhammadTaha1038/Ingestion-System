@@ -1091,7 +1091,7 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
   // Send-test pick from campaign buttons (prefix stp:)
   if (interaction.customId.startsWith("stp:")) {
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = interaction.customId.slice("stp:".length);
+    const campaignId = resolveShortCustomId(interaction.customId, "stp") ?? interaction.customId.slice("stp:".length);
     logger.info("send-test campaign pick received", { campaignId, latestTestRecipientEmail });
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
