@@ -45,7 +45,9 @@ export const startDiscordBot = async (): Promise<void> => {
                 return;
             }
         } catch (error: any) {
-            logger.error("discord interaction failed", { error: String(error), stack: error?.stack });
+            const errString = String(error);
+            const errStack = error && error.stack ? error.stack : (new Error(errString)).stack;
+            logger.error("discord interaction failed", { error: errString, stack: errStack });
             if (interaction.isRepliable()) {
                 try {
                     if (interaction.deferred || interaction.replied) {
