@@ -44,8 +44,8 @@ export const startDiscordBot = async (): Promise<void> => {
                 await handleChatInputCommand(interaction);
                 return;
             }
-        } catch (error) {
-            logger.error("discord interaction failed", { error: String(error) });
+        } catch (error: any) {
+            logger.error("discord interaction failed", { error: String(error), stack: error?.stack });
             if (interaction.isRepliable()) {
                 try {
                     if (interaction.deferred || interaction.replied) {
