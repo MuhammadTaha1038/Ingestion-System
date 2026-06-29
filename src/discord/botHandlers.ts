@@ -791,6 +791,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
+  logger.warn("unhandled button interaction", { customId: interaction.customId, user: interaction.user?.id });
   await interaction.reply({ content: "unhandled_button", ephemeral: true });
 };
 
