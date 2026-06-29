@@ -12,7 +12,7 @@ import { ButtonIdMapRepository } from "../db/repositories/buttonIdMap.js";
 import { getDatabasePool } from "../db/pool.js";
 import { jobStore } from "../jobs/store.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
-import { autoSendLatestCompletedDataset, selectCampaignById } from "../campaigns/sendService.js";
+import { autoSendLatestCompletedDataset, selectCampaignById, sendSingleRecipientWithCampaign } from "../campaigns/sendService.js";
 import { encrypt } from "../security/crypto.js";
 import {
   dashboardButtonIds,
@@ -194,13 +194,18 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     }
     let message;
     try {
-      message = await queueDashboardIngestion({ format: "auto", content: latestTestRecipientEmail, campaignId });
+      const result = await sendSingleRecipientWithCampaign({ campaignId, recipientEmail: latestTestRecipientEmail });
+      if (!result) {
+        await interaction.editReply("campaign_not_found");
+        return;
+      }
+      message = `Test email queued for campaign ${result.campaignId}.`;
     } catch (err) {
-      logger.error("send-test ingestion failed (early)", { error: String(err), campaignId, latestTestRecipientEmail });
-      await interaction.editReply("send_test_ingestion_error");
+      logger.error("send-test direct send failed", { error: String(err), campaignId, latestTestRecipientEmail });
+      await interaction.editReply("send_test_send_error");
       return;
     }
-    logger.info("send-test ingestion queued (early)", { campaignId, message });
+    logger.info("send-test direct send queued", { campaignId, message });
     await interaction.editReply(message);
     return;
   }

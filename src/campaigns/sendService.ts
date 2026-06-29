@@ -109,6 +109,58 @@ export const enqueueCampaignSendForDataset = async (args: {
   };
 };
 
+export const sendSingleRecipientWithCampaign = async (args: {
+  campaignId: string;
+  recipientEmail: string;
+  pool?: Pool;
+}): Promise<{ queued: number; campaignId: string; recipients: number } | null> => {
+  const campaign = await selectCampaignById(args.campaignId, args.pool);
+  if (!campaign) {
+    return null;
+  }
+
+  const sendJobId = randomUUID();
+  const jobRepo = new JobRepository(getPool(args.pool));
+  await jobRepo.createJob({
+    id: sendJobId,
+    type: "sending",
+    status: "pending",
+    datasetId: null,
+    campaignId: campaign.id
+  });
+
+  jobStore.createJob("sending", {
+    campaignId: campaign.id,
+    recipients: 1
+  }, sendJobId);
+
+  await sendingQueue.add(
+    "send",
+    {
+      campaignId: campaign.id,
+      windowId: "",
+      fromAddress: campaign.smtp_account_email ?? undefined,
+      replyTo: campaign.reply_to ?? undefined,
+      recipients: [
+        {
+          to: args.recipientEmail,
+          subject: campaign.subject,
+          html: campaign.body_html,
+          text: campaign.body_text ?? undefined
+        }
+      ],
+      smtpAccountId: campaign.smtp_account_id ?? undefined
+    },
+    { jobId: sendJobId, removeOnComplete: true }
+  );
+
+  return {
+    queued: 1,
+    campaignId: campaign.id,
+    recipients: 1
+  };
+};
+
 export const sendDatasetWithCampaign = async (args: {
   datasetId: string;
   campaignId: string;
