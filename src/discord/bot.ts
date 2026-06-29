@@ -45,9 +45,15 @@ export const startDiscordBot = async (): Promise<void> => {
                 return;
             }
         } catch (error: any) {
-            const errString = String(error);
-            const errStack = error && error.stack ? error.stack : (new Error(errString)).stack;
-            logger.error("discord interaction failed", { error: errString, stack: errStack });
+                        const errString = String(error);
+                        const errStack = error && error.stack ? error.stack : (new Error(errString)).stack;
+                        // Also write stack directly to stderr so journal captures the full trace
+                        try {
+                            console.error('\n--- DISCORD INTERACTION ERROR STACK START ---');
+                            console.error(errStack);
+                            console.error('--- DISCORD INTERACTION ERROR STACK END ---\n');
+                        } catch {}
+                        logger.error("discord interaction failed", { error: errString, stack: errStack });
             if (interaction.isRepliable()) {
                 try {
                     if (interaction.deferred || interaction.replied) {
