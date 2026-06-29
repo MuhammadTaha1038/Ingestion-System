@@ -31,14 +31,13 @@ const dedupStore = config.databaseUrl
   : new InMemoryDedupStore();
 const datasetRepo = config.databaseUrl ? new DatasetRepository() : null;
 const jobRepo = config.databaseUrl ? new JobRepository() : null;
-const s3Enabled = hasS3Config(config.s3);
-const s3Client = s3Enabled ? createS3Client(config.s3) : null;
+// s3 client is resolved dynamically at job time so updated env is respected
 
 if (!config.databaseUrl) {
   logger.warn("DATABASE_URL not set; using in-memory dedup store");
 }
 
-if (!s3Enabled) {
+if (!hasS3Config(config.s3)) {
   logger.warn("S3 config incomplete; using local storage");
 }
 
@@ -73,13 +72,17 @@ const fetchSourceBytes = async (sourcePath: string): Promise<{ buffer: Buffer; s
   }
 
   const looksLikeWindowsPath = /^[a-zA-Z]:[\\/]/.test(sourcePath);
-  if (sourcePath.startsWith("s3://") || (s3Client && !looksLikeWindowsPath && !sourcePath.includes("://"))) {
-    if (!s3Client) {
+  if (sourcePath.startsWith("s3://") || (!looksLikeWindowsPath && !sourcePath.includes("://"))) {
+    const cfg = loadConfig();
+    const dynamicS3Enabled = hasS3Config(cfg.s3);
+    const client = dynamicS3Enabled ? createS3Client(cfg.s3) : null;
+
+    if (!client) {
       throw new Error("s3_not_configured");
     }
 
-    const location = resolveS3Location(sourcePath, config.s3.bucket);
-    return { buffer: await getObjectBytes(s3Client, location.bucket, location.key), sourceName: location.key.split("/").pop() ?? location.key };
+    const location = resolveS3Location(sourcePath, cfg.s3.bucket);
+    return { buffer: await getObjectBytes(client, location.bucket, location.key), sourceName: location.key.split("/").pop() ?? location.key };
   }
 
   throw new Error("unsupported_source_path");
@@ -105,9 +108,11 @@ const writeProcessedDataset = async (
   const lines = result.records.map((record) => JSON.stringify(record)).join("\n");
   const payload = lines.length > 0 ? `${lines}\n` : "";
 
-  if (s3Client) {
-    const location = resolveS3Location(key, config.s3.bucket);
-    await putObjectText(s3Client, location.bucket, location.key, payload, "application/x-ndjson");
+  const cfg = loadConfig();
+  if (hasS3Config(cfg.s3)) {
+    const client = createS3Client(cfg.s3);
+    const location = resolveS3Location(key, cfg.s3.bucket);
+    await putObjectText(client, location.bucket, location.key, payload, "application/x-ndjson");
     return `s3://${location.bucket}/${location.key}`;
   }
 
@@ -136,9 +141,11 @@ const writeReport = async (
 
   const payload = JSON.stringify(report, null, 2);
 
-  if (s3Client) {
-    const location = resolveS3Location(key, config.s3.bucket);
-    await putObjectText(s3Client, location.bucket, location.key, payload, "application/json");
+  const cfg2 = loadConfig();
+  if (hasS3Config(cfg2.s3)) {
+    const client = createS3Client(cfg2.s3);
+    const location = resolveS3Location(key, cfg2.s3.bucket);
+    await putObjectText(client, location.bucket, location.key, payload, "application/json");
     return `s3://${location.bucket}/${location.key}`;
   }
 
@@ -255,44 +262,22 @@ export const startIngestionWorker = (): void => {
         });
       }
 
-      const autoSendResult = datasetId ? await autoSendDatasetIfPossible(datasetId, undefined, job.data.campaignId) : null;
-      if (autoSendResult) {
-        const existingJob = jobStore.getJob(jobId);
-        jobStore.updateJob(jobId, {
-          payload: {
-            ...existingJob?.payload,
-            autoSend: {
-              queued: true,
-              campaignId: autoSendResult.campaignId,
-              recipients: autoSendResult.recipients,
-              queuedJobs: autoSendResult.queued
-            }
+      // Per client requirement: do not auto-send after ingest. Persist dataset only.
+      const existingJob = jobStore.getJob(jobId);
+      jobStore.updateJob(jobId, {
+        payload: {
+          ...existingJob?.payload,
+          autoSend: {
+            queued: false,
+            reason: "auto_send_disabled"
           }
-        });
-        logger.info("automatic campaign send queued", {
-          jobId,
-          datasetId,
-          campaignId: autoSendResult.campaignId,
-          recipients: autoSendResult.recipients,
-          queued: autoSendResult.queued
-        });
-      } else {
-        const existingJob = jobStore.getJob(jobId);
-        jobStore.updateJob(jobId, {
-          payload: {
-            ...existingJob?.payload,
-            autoSend: {
-              queued: false,
-              reason: job.data.campaignId ? "campaign_not_found" : "no_active_campaign"
-            }
-          }
-        });
-        logger.info("ingestion completed without auto send target", {
-          jobId,
-          datasetId,
-          requestedCampaignId: job.data.campaignId ?? null
-        });
-      }
+        }
+      });
+      logger.info("ingestion completed (auto send disabled)", {
+        jobId,
+        datasetId,
+        requestedCampaignId: job.data.campaignId ?? null
+      });
 
       logger.info("ingestion job completed", { jobId });
     } catch (error) {
