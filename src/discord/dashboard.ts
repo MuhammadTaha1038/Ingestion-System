@@ -293,19 +293,11 @@ export const createSendTestModal = () => {
     .setRequired(false)
     .setPlaceholder("Leave empty to use latest test recipient");
 
-  const campaignId = new TextInputBuilder()
-    .setCustomId("campaign_id")
-    .setLabel("Campaign ID")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setPlaceholder("Optional campaign id");
-
   return new ModalBuilder()
     .setCustomId("dashboard:send-test-modal")
     .setTitle("Send Test Email")
     .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(email),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId)
+      new ActionRowBuilder<TextInputBuilder>().addComponents(email)
     );
 };
 

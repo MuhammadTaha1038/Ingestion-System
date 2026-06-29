@@ -1022,7 +1022,6 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
   if (interaction.customId === "dashboard:send-test-modal") {
     await interaction.deferReply({ ephemeral: true });
     const email = interaction.fields.getTextInputValue("email_address").trim() || latestTestRecipientEmail || "";
-    const campaignId = interaction.fields.getTextInputValue("campaign_id").trim() || undefined;
     if (!email) {
       await interaction.editReply("test_recipient_email_required");
       return;
@@ -1034,32 +1033,25 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       logger.warn("failed to persist test recipient", { error: String(e) });
     }
 
-    // If no campaign provided, show a campaign-pick UI so user can select from the dashboard
-    if (!campaignId) {
-      if (!config.databaseUrl) {
-        await interaction.editReply("db_required");
-        return;
-      }
-      const pool = getDatabasePool();
-      const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
-      if (!res.rows || res.rows.length === 0) {
-        // No campaign — perform a plain ingestion without a campaign
-        const message = await queueDashboardIngestion({ format: "auto", content: email });
-        await interaction.editReply(message);
-        return;
-      }
-
-      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`stp:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Primary));
-      for (let i = 0; i < buttons.length; i += 5) {
-        rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
-      }
-      await interaction.editReply({ content: "Select a campaign to send this test email with:", components: rows });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    if (!res.rows || res.rows.length === 0) {
+      // No campaign — perform a plain ingestion without a campaign
+      const message = await queueDashboardIngestion({ format: "auto", content: email });
+      await interaction.editReply(message);
       return;
     }
 
-    const message = await queueDashboardIngestion({ format: "auto", content: email, campaignId });
-    await interaction.editReply(message);
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`stp:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Primary));
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+    }
+    await interaction.editReply({ content: "Select a campaign to send this test email with:", components: rows });
     return;
   }
 
