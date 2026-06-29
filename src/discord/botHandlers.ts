@@ -1,4 +1,5 @@
 import { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuInteraction } from "discord.js";
+import { createHash } from "crypto";
 import { loadConfig } from "../config/config.js";
 import { createLogger, getRecentLogs } from "../logging/logger.js";
 import { DatasetRepository } from "../db/repositories/datasets.js";
@@ -76,6 +77,34 @@ import {
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
 let latestTestRecipientEmail: string | null = null;
+
+const MAX_CUSTOM_ID_LENGTH = 100;
+const customIdMap = new Map<string, string>();
+
+const createShortCustomId = (prefix: string, value: string): string => {
+  const raw = `${prefix}:${value}`;
+  if (raw.length <= MAX_CUSTOM_ID_LENGTH) {
+    return raw;
+  }
+
+  const token = createHash("sha256").update(raw).digest("hex").slice(0, 16);
+  const customId = `${prefix}:h:${token}`;
+  customIdMap.set(customId, raw);
+  return customId;
+};
+
+const resolveShortCustomId = (customId: string, prefix: string): string | null => {
+  if (!customId.startsWith(`${prefix}:`)) {
+    return null;
+  }
+
+  const suffix = customId.slice(prefix.length + 1);
+  if (suffix.startsWith("h:")) {
+    return customIdMap.get(customId) ?? null;
+  }
+
+  return suffix;
+};
 
 // load persisted latest test recipient on demand
 const testRecipientRepo = new TestRecipientRepository();
@@ -299,7 +328,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
     const buttons = list.slice(0, 25).map((row) =>
-      new ButtonBuilder().setCustomId(`dashboard:dataset-pick:${row.id}`).setLabel((row.source_name ?? String(row.id)).slice(0, 80)).setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(createShortCustomId("dashboard:dataset-pick", String(row.id))).setLabel((row.source_name ?? String(row.id)).slice(0, 80)).setStyle(ButtonStyle.Secondary)
     );
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
@@ -325,7 +354,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     }
 
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`dashboard:campaign-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Secondary));
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Secondary));
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
@@ -336,8 +365,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   // Handle dynamic pick buttons: dataset pick and campaign pick
   if (interaction.customId.startsWith("dashboard:campaign-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const parts = interaction.customId.split(":");
-    const campaignId = parts.slice(2).join(":");
+    const campaignId = resolveShortCustomId(interaction.customId, "dashboard:campaign-pick") ?? interaction.customId.slice("dashboard:campaign-pick:".length);
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
       return;
@@ -367,8 +395,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
   if (interaction.customId.startsWith("dashboard:dataset-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const parts = interaction.customId.split(":");
-    const datasetId = parts.slice(2).join(":");
+    const datasetId = resolveShortCustomId(interaction.customId, "dashboard:dataset-pick") ?? interaction.customId.slice("dashboard:dataset-pick:".length);
     if (!datasetId) {
       await interaction.editReply("dataset_id_required");
       return;
@@ -411,7 +438,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`dashboard:run-campaign-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger));
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:run-campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger));
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
@@ -422,7 +449,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   // Step 2 of Run Campaign: campaign selected → show dataset picker
   if (interaction.customId.startsWith("dashboard:run-campaign-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = interaction.customId.slice("dashboard:run-campaign-pick:".length);
+    const campaignId = resolveShortCustomId(interaction.customId, "dashboard:run-campaign-pick") ?? interaction.customId.slice("dashboard:run-campaign-pick:".length);
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
       return;
@@ -442,7 +469,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     const prefix = `rcdp:`;
     const buttons = datasets.slice(0, 25).map((d) =>
       new ButtonBuilder()
-        .setCustomId(`${prefix}${campaignId}:${d.id}`)
+        .setCustomId(createShortCustomId(`${prefix}${campaignId}`, String(d.id)))
         .setLabel((d.source_name ?? String(d.id)).slice(0, 80))
         .setStyle(ButtonStyle.Primary)
     );
@@ -454,17 +481,23 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   // Step 3 of Run Campaign: dataset selected → trigger send directly
-  if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:")) {
+  if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:") || interaction.customId.startsWith("rcdp:")) {
     await interaction.deferReply({ ephemeral: true });
-    // support the shorter prefix used when creating buttons
-    const shortPrefix = "rcdp:";
-    const remainder = interaction.customId.startsWith(shortPrefix)
-      ? interaction.customId.slice(shortPrefix.length)
-      : interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
-    // remainder is campaignId:datasetId — datasetId is a UUID so split at first colon after the campaign UUID
-    const uuidLen = 36;
-    const campaignId = remainder.slice(0, uuidLen);
-    const datasetId = remainder.slice(uuidLen + 1); // skip the separating ":" 
+    let remainder: string | null = null;
+
+    if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:")) {
+      remainder = interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
+    } else {
+      remainder = resolveShortCustomId(interaction.customId, "rcdp");
+    }
+
+    if (!remainder) {
+      await interaction.editReply("campaign_id_and_dataset_id_required");
+      return;
+    }
+
+    const [campaignId, ...datasetParts] = remainder.split(":");
+    const datasetId = datasetParts.join(":");
     if (!campaignId || !datasetId) {
       await interaction.editReply("campaign_id_and_dataset_id_required");
       return;
@@ -1047,7 +1080,7 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
     }
 
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`stp:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Primary));
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("stp", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Primary));
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
