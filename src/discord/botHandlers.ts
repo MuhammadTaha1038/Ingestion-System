@@ -1059,26 +1059,28 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
   if (interaction.customId.startsWith("stp:")) {
     await interaction.deferReply({ ephemeral: true });
     const campaignId = interaction.customId.slice("stp:".length);
-        logger.info("send-test campaign pick received", { campaignId, latestTestRecipientEmail });
-        if (!campaignId) {
-            await interaction.editReply("campaign_id_required");
-            return;
-        }
-        await ensureLatestRecipientLoaded();
-        if (!latestTestRecipientEmail) {
-            await interaction.editReply("no_test_recipient_available");
-            return;
-        }
-        let message;
-        try {
-            message = await queueDashboardIngestion({ format: "auto", content: latestTestRecipientEmail, campaignId });
-        }
-        catch (err) {
-            logger.error("send-test ingestion failed", { error: String(err), campaignId, latestTestRecipientEmail });
-            await interaction.editReply("send_test_ingestion_error");
-            return;
-        }
-        logger.info("send-test ingestion queued", { campaignId, message });
+    logger.info("send-test campaign pick received", { campaignId, latestTestRecipientEmail });
+    if (!campaignId) {
+      await interaction.editReply("campaign_id_required");
+      return;
+    }
+    await ensureLatestRecipientLoaded();
+    if (!latestTestRecipientEmail) {
+      await interaction.editReply("no_test_recipient_available");
+      return;
+    }
+    let message;
+    try {
+      message = await queueDashboardIngestion({ format: "auto", content: latestTestRecipientEmail, campaignId });
+    } catch (err) {
+      logger.error("send-test ingestion failed", { error: String(err), campaignId, latestTestRecipientEmail });
+      await interaction.editReply("send_test_ingestion_error");
+      return;
+    }
+    logger.info("send-test ingestion queued", { campaignId, message });
+    await interaction.editReply(message);
+    return;
+  }
 
   if (interaction.customId === cpanelCreateModalId) {
     await interaction.deferReply({ ephemeral: true });
