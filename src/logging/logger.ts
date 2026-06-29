@@ -54,8 +54,20 @@ export const createLogger = (minLevel?: string): Logger => {
     if (logBuffer.length > LOG_BUFFER_LIMIT) {
       logBuffer.shift();
     }
-
-    const payload = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
+    let payload = "";
+    if (meta && Object.keys(meta).length > 0) {
+      try {
+        payload = ` ${JSON.stringify(meta)}`;
+      } catch (err) {
+        // Fallback: avoid throwing for very large or unserializable meta
+        try {
+          const keys = Object.keys(meta).slice(0, 20);
+          payload = ` {unserializable_meta_keys:${JSON.stringify(keys)}}`;
+        } catch {
+          payload = " {unserializable_meta}";
+        }
+      }
+    }
     const line = `[${level.toUpperCase()}] ${message}${payload}`;
 
     if (level === "error") {
