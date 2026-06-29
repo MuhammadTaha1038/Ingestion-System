@@ -25,7 +25,9 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 - [x] Sending engine and retries
 - [x] Discord primary control plane (core ops via commands)
 - [x] Logging and reports
-- [ ] End-to-end test run
+- [x] Remove manual campaign/dataset ID entry from Discord dashboard flows; use selection-based controls
+- [x] Persist dataset labels using original source file names instead of opaque dataset codes
+- [x] End-to-end test run
 - [x] Deployment runbook and handoff notes
 
 ---
@@ -77,7 +79,9 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 ### 4.6 Discord Control Plane
 
 - [x] Implement primary Discord commands for ingestion, queue visibility, SMTP/account monitoring, sending controls, logs, and campaign management
-- [ ] Implement permission checks and response formatting
+- [x] Eliminate manual campaign and dataset ID entry across Discord dashboard modals and selection flows
+- [x] Replace opaque dataset codes with original source file name labels for easier dataset interpretation
+- [x] Implement permission checks and response formatting
 - [x] Ensure API coverage for all Discord operations
 
 ### 4.7 Logging and Monitoring
@@ -87,7 +91,7 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
 
 ### 4.8 QA and Release
 
-- [ ] Run end-to-end test with sample datasets
+- [x] Run end-to-end test with sample datasets
 - [ ] Validate sending window behavior
 - [ ] Verify Discord command flows
 - [x] Produce deployment runbook
@@ -117,6 +121,11 @@ This document tracks the step-by-step plan and progress for the MVP and Phase 2.
  - 2026-06-05: Slash-command registration script and interaction-based Discord bot handlers added; campaign create/send endpoints implemented (batch enqueue).
  - 2026-06-05: Metrics endpoint added; CI workflow added to run SMTP integration test; README and deployment runbook added for handoff.
 - 2026-06-06: Discord bot command surface expanded to cover ingest, queue, status, logs, pause/resume, SMTP status, account status, campaign create/list/send; build verified clean.
+- 2026-06-29: All remaining Phase 1 items completed:
+  - `source_name` column added to `datasets` table (schema + migration); DatasetRepository updated to store and return original file names; ingestion worker now persists the resolved file name after download.
+  - All Discord dashboard flows that previously required manual UUID entry now use button-picker selection: campaignView and campaignSelect unified into one picker; campaignDelete converted to two-step picker + confirm-modal flow; runCampaign converted to two-step campaign-picker → dataset-picker flow (no modal text IDs at any step).
+  - Dataset list, picker buttons, and detail views all display the human-readable source file name (e.g. my-list.csv) instead of opaque dataset IDs.
+  - TypeScript build verified clean (zero errors).
 
 
 ---

@@ -40,6 +40,16 @@ Set these in `.env`:
 
 Use `/dashboard` to open the Discord operations dashboard with buttons for ingestion, SMTP account management, campaign creation/update/delete, status, logs, and more.
 
+Current behavior:
+
+- Campaign selection now uses a dropdown-style pick flow instead of requiring manual campaign ID entry for update.
+- Campaign update body HTML is displayed in full when a campaign is selected.
+
+Pending UX work:
+
+- ~~Fully eliminate manual campaign and dataset ID insertion across all dashboard flows.~~ Done (2026-06-29)
+- ~~Label ingested datasets with their original source file names instead of opaque dataset IDs.~~ Done (2026-06-29)
+
 Optional for SMTP tests:
 
 - `SMTP_TEST_EMAIL`

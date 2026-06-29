@@ -18,12 +18,13 @@ export class DatasetRepository {
   async createDataset(params: {
     sourceType: string;
     sourcePath: string;
+    sourceName?: string;
     status?: string;
   }): Promise<string> {
     const status = params.status ?? "pending";
     const result = await this.pool.query(
-      "INSERT INTO datasets (source_type, source_path, status) VALUES ($1, $2, $3) RETURNING id",
-      [params.sourceType, params.sourcePath, status]
+      "INSERT INTO datasets (source_type, source_path, source_name, status) VALUES ($1, $2, $3, $4) RETURNING id",
+      [params.sourceType, params.sourcePath, params.sourceName ?? null, status]
     );
 
     return result.rows[0]?.id as string;
@@ -32,6 +33,13 @@ export class DatasetRepository {
   async markProcessing(id: string): Promise<void> {
     await this.pool.query("UPDATE datasets SET status = $1 WHERE id = $2", [
       "processing",
+      id
+    ]);
+  }
+
+  async updateSourceName(id: string, sourceName: string): Promise<void> {
+    await this.pool.query("UPDATE datasets SET source_name = $1 WHERE id = $2", [
+      sourceName,
       id
     ]);
   }
@@ -65,20 +73,20 @@ export class DatasetRepository {
     ]);
   }
 
-  async listAllDatasets(): Promise<Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>> {
+  async listAllDatasets(): Promise<Array<{ id: string; source_type: string; source_path: string; source_name: string | null; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>> {
     const result = await this.pool.query(
-      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+      `SELECT id, source_type, source_path, source_name, status, raw_count, valid_count, duplicate_count, error_count, created_at
        FROM datasets
        ORDER BY created_at DESC
        LIMIT 20`
     );
 
-    return result.rows as Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
+    return result.rows as Array<{ id: string; source_type: string; source_path: string; source_name: string | null; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
   }
 
-  async getDatasetById(id: string): Promise<{ id: string; source_type: string; source_path: string; status: string; raw_count: number | null; valid_count: number | null; duplicate_count: number | null; error_count: number | null; processed_path: string | null; report_path: string | null; created_at: string } | null> {
+  async getDatasetById(id: string): Promise<{ id: string; source_type: string; source_path: string; source_name: string | null; status: string; raw_count: number | null; valid_count: number | null; duplicate_count: number | null; error_count: number | null; processed_path: string | null; report_path: string | null; created_at: string } | null> {
     const result = await this.pool.query(
-      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, processed_path, report_path, created_at
+      `SELECT id, source_type, source_path, source_name, status, raw_count, valid_count, duplicate_count, error_count, processed_path, report_path, created_at
        FROM datasets
        WHERE id = $1 LIMIT 1`,
       [id]

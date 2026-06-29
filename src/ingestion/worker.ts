@@ -200,6 +200,12 @@ export const startIngestionWorker = (): void => {
 
       const source = await resolveInputSource(job.data.input);
       const sourceName = source.sourceName;
+
+      // Persist the original file name back to the dataset record
+      if (datasetRepo && datasetId && sourceName && sourceName !== "inline") {
+        await datasetRepo.updateSourceName(datasetId, sourceName);
+      }
+
       const chunks = resolveIngestionChunks(source.buffer, sourceName);
       if (chunks.length === 0) {
         throw new Error("no_supported_files_found");

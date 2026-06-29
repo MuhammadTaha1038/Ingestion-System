@@ -122,6 +122,7 @@ export type PersistentJobSummary = {
   latestDataset: {
     id: string;
     source_path: string;
+    source_name: string | null;
     status: string;
     raw_count: number;
     valid_count: number;
@@ -152,7 +153,7 @@ export const getPersistentJobSummary = async (): Promise<PersistentJobSummary> =
   );
 
   const latestDatasetRes = await pool.query(
-    `SELECT id, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+    `SELECT id, source_path, source_name, status, raw_count, valid_count, duplicate_count, error_count, created_at
      FROM datasets ORDER BY created_at DESC LIMIT 1`
   );
 
@@ -171,7 +172,7 @@ export const formatPersistentJobSummary = (summary: PersistentJobSummary): strin
 
   if (summary.latestDataset) {
     lines.push(
-      `Latest ingested file: ${summary.latestDataset.source_path}`,
+      `Latest ingested file: ${summary.latestDataset.source_name ?? summary.latestDataset.source_path}`,
       `Dataset status: ${summary.latestDataset.status}`,
       `Counts: fetched=${summary.latestDataset.raw_count} valid=${summary.latestDataset.valid_count} duplicates=${summary.latestDataset.duplicate_count} errors=${summary.latestDataset.error_count}`
     );

@@ -65,7 +65,9 @@ export const dashboardButtonIds = {
   subdomainCreate: "dashboard:subdomain-create",
   emailList: "dashboard:email-list",
   emailCreate: "dashboard:email-create",
-  campaignUsage: "dashboard:campaign-usage"
+  campaignUsage: "dashboard:campaign-usage",
+  campaignDeletePick: "dashboard:campaign-delete-pick",
+  runCampaignPick: "dashboard:run-campaign-pick"
 } as const;
 
 export const getDashboardChannelId = (): string | undefined => {
@@ -416,6 +418,37 @@ export const createCampaignDeleteModal = () => {
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(campaignId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(confirm)
+    );
+};
+
+export const createCampaignDeleteConfirmModal = (campaignId: string) => {
+  const confirm = new TextInputBuilder()
+    .setCustomId("confirm")
+    .setLabel("Type DELETE to confirm deletion")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(`dashboard:campaign-delete-confirm-modal:${campaignId}`)
+    .setTitle("Confirm Campaign Delete")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(confirm)
+    );
+};
+
+export const createRunCampaignDatasetModal = (campaignId: string) => {
+  const datasetId = new TextInputBuilder()
+    .setCustomId("dataset_id")
+    .setLabel("Dataset ID")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder("Dataset id to use for this campaign");
+
+  return new ModalBuilder()
+    .setCustomId(`dashboard:run-campaign-dataset-modal:${campaignId}`)
+    .setTitle("Select Dataset")
+    .addComponents(
+      new ActionRowBuilder<TextInputBuilder>().addComponents(datasetId)
     );
 };
 

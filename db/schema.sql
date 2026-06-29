@@ -4,6 +4,7 @@ CREATE TABLE datasets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   source_type text NOT NULL,
   source_path text NOT NULL,
+  source_name text,
   status text NOT NULL DEFAULT 'pending',
   raw_count integer NOT NULL DEFAULT 0,
   valid_count integer NOT NULL DEFAULT 0,

@@ -18,12 +18,14 @@ import {
   createDatasetSelectModal,
   createCampaignDetailsModal,
   createRunCampaignModal,
+  createRunCampaignDatasetModal,
   createAddTestRecipientModal,
   createSendTestModal,
   createSmtpImportModal,
   createCampaignModal,
   createCampaignUpdateModal,
   createCampaignDeleteModal,
+  createCampaignDeleteConfirmModal,
   createSmtpModal,
   createSmtpDeleteModal,
   createHierarchyModal,
@@ -250,19 +252,19 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
     const pool = getDatabasePool();
     const res = await pool.query(
-      `SELECT id, source_type, source_path, status, raw_count, valid_count, duplicate_count, error_count, created_at
+      `SELECT id, source_type, source_path, source_name, status, raw_count, valid_count, duplicate_count, error_count, created_at
        FROM datasets
        ORDER BY created_at DESC
        LIMIT 25`
     );
-    const list = res.rows as Array<{ id: string; source_type: string; source_path: string; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
+    const list = res.rows as Array<{ id: string; source_type: string; source_path: string; source_name: string | null; status: string; raw_count: number; valid_count: number; duplicate_count: number; error_count: number; created_at: string }>;
     if (list.length === 0) {
       await interaction.editReply("No datasets found.");
       return;
     }
 
     await interaction.editReply(truncate(list.slice(0, 10).map((row) =>
-      `${row.id} [${row.status}] ${row.source_type} ${row.source_path} raw=${row.raw_count} valid=${row.valid_count} dup=${row.duplicate_count} err=${row.error_count}`
+      `${row.source_name ?? row.id} [${row.status}] ${row.source_type} raw=${row.raw_count} valid=${row.valid_count} dup=${row.duplicate_count} err=${row.error_count}`
     ).join("\n")));
     return;
   }
@@ -283,7 +285,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
     const buttons = list.slice(0, 25).map((row) =>
-      new ButtonBuilder().setCustomId(`dashboard:dataset-pick:${row.id}`).setLabel(String(row.id).slice(0, 20)).setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`dashboard:dataset-pick:${row.id}`).setLabel((row.source_name ?? String(row.id)).slice(0, 80)).setStyle(ButtonStyle.Secondary)
     );
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
@@ -294,32 +296,26 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   if (interaction.customId === dashboardButtonIds.campaignSelect || interaction.customId === dashboardButtonIds.campaignView) {
-    // For campaignSelect, show an ephemeral selection list (buttons) so mobile users don't need to type IDs.
-    if (interaction.customId === dashboardButtonIds.campaignSelect) {
-      await interaction.deferReply({ ephemeral: true });
-      if (!config.databaseUrl) {
-        await interaction.editReply("db_required");
-        return;
-      }
-
-      const pool = getDatabasePool();
-      const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
-      if (!res.rows || res.rows.length === 0) {
-        await interaction.editReply("No campaigns found.");
-        return;
-      }
-
-      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`dashboard:campaign-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 20)).setStyle(ButtonStyle.Secondary));
-      for (let i = 0; i < buttons.length; i += 5) {
-        rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
-      }
-      await interaction.editReply({ content: "Select a campaign:", components: rows });
+    // Both campaignSelect and campaignView now use the same button-picker flow — no manual ID entry needed.
+    await interaction.deferReply({ ephemeral: true });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
       return;
     }
 
-    // campaignView retains modal flow for manual id entry
-    await interaction.showModal(createCampaignDetailsModal());
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    if (!res.rows || res.rows.length === 0) {
+      await interaction.editReply("No campaigns found.");
+      return;
+    }
+
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`dashboard:campaign-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Secondary));
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+    }
+    await interaction.editReply({ content: "Select a campaign:", components: rows });
     return;
   }
 
@@ -375,7 +371,8 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     }
 
     await interaction.editReply(truncate([
-      `Dataset: ${dataset.id}`,
+      `Dataset: ${dataset.source_name ?? dataset.id}`,
+      `ID: ${dataset.id}`,
       `Status: ${dataset.status}`,
       `Source: ${dataset.source_type} ${dataset.source_path}`,
       `Counts: raw=${dataset.raw_count ?? 0} valid=${dataset.valid_count ?? 0} duplicate=${dataset.duplicate_count ?? 0} error=${dataset.error_count ?? 0}`,
@@ -387,7 +384,77 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   if (interaction.customId === dashboardButtonIds.runCampaign) {
-    await interaction.showModal(createRunCampaignModal());
+    // Step 1: Show campaign picker — user picks campaign, then dataset picker appears
+    await interaction.deferReply({ ephemeral: true });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    if (!res.rows || res.rows.length === 0) {
+      await interaction.editReply("No campaigns found. Create a campaign first.");
+      return;
+    }
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`dashboard:run-campaign-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger));
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+    }
+    await interaction.editReply({ content: "Select a campaign to run:", components: rows });
+    return;
+  }
+
+  // Step 2 of Run Campaign: campaign selected → show dataset picker
+  if (interaction.customId.startsWith("dashboard:run-campaign-pick:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const campaignId = interaction.customId.slice("dashboard:run-campaign-pick:".length);
+    if (!campaignId) {
+      await interaction.editReply("campaign_id_required");
+      return;
+    }
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const repo = new DatasetRepository();
+    const datasets = await repo.listAllDatasets();
+    if (datasets.length === 0) {
+      await interaction.editReply("No datasets found. Ingest a file first.");
+      return;
+    }
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = datasets.slice(0, 25).map((d) =>
+      new ButtonBuilder()
+        .setCustomId(`dashboard:run-campaign-dataset-pick:${campaignId}:${d.id}`)
+        .setLabel((d.source_name ?? String(d.id)).slice(0, 80))
+        .setStyle(ButtonStyle.Primary)
+    );
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+    }
+    await interaction.editReply({ content: "Select a dataset to send:", components: rows });
+    return;
+  }
+
+  // Step 3 of Run Campaign: dataset selected → trigger send directly
+  if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const remainder = interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
+    // remainder is campaignId:datasetId — datasetId is a UUID so split at first colon after the campaign UUID
+    const uuidLen = 36;
+    const campaignId = remainder.slice(0, uuidLen);
+    const datasetId = remainder.slice(uuidLen + 1); // skip the separating ":" 
+    if (!campaignId || !datasetId) {
+      await interaction.editReply("campaign_id_and_dataset_id_required");
+      return;
+    }
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const message = await queueCampaignSend(campaignId, datasetId);
+    await interaction.editReply(message);
     return;
   }
 
@@ -531,7 +598,37 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   if (interaction.customId === dashboardButtonIds.campaignDelete) {
-    await interaction.showModal(createCampaignDeleteModal());
+    // Step 1: show campaign picker — no manual ID input needed
+    await interaction.deferReply({ ephemeral: true });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    if (!res.rows || res.rows.length === 0) {
+      await interaction.editReply("No campaigns found.");
+      return;
+    }
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = res.rows.map((r: any) =>
+      new ButtonBuilder().setCustomId(`dashboard:campaign-delete-pick:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger)
+    );
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+    }
+    await interaction.editReply({ content: "Select a campaign to delete:", components: rows });
+    return;
+  }
+
+  // Step 2 of Delete Campaign: campaign picked → show confirm modal with ID embedded in customId
+  if (interaction.customId.startsWith("dashboard:campaign-delete-pick:")) {
+    const campaignId = interaction.customId.slice("dashboard:campaign-delete-pick:".length);
+    if (!campaignId) {
+      await interaction.reply({ content: "campaign_id_required", ephemeral: true });
+      return;
+    }
+    await interaction.showModal(createCampaignDeleteConfirmModal(campaignId));
     return;
   }
 
@@ -763,6 +860,48 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
     return;
   }
 
+  // New picker-flow delete confirm: campaign ID is embedded in the customId
+  if (interaction.customId.startsWith("dashboard:campaign-delete-confirm-modal:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const campaignId = interaction.customId.slice("dashboard:campaign-delete-confirm-modal:".length);
+    const confirm = interaction.fields.getTextInputValue("confirm").trim();
+
+    if (!campaignId) {
+      await interaction.editReply("campaign_id_required");
+      return;
+    }
+    if (confirm !== "DELETE") {
+      await interaction.editReply("delete_confirmation_required");
+      return;
+    }
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const result = await deleteCampaignById(campaignId);
+    await interaction.editReply(result);
+    return;
+  }
+
+  // New picker-flow run campaign: campaign ID embedded in customId, only dataset ID typed
+  if (interaction.customId.startsWith("dashboard:run-campaign-dataset-modal:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const campaignId = interaction.customId.slice("dashboard:run-campaign-dataset-modal:".length);
+    const datasetId = interaction.fields.getTextInputValue("dataset_id").trim();
+
+    if (!campaignId || !datasetId) {
+      await interaction.editReply("campaign_id_and_dataset_id_required");
+      return;
+    }
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    const message = await queueCampaignSend(campaignId, datasetId);
+    await interaction.editReply(message);
+    return;
+  }
+
   if (interaction.customId === "dashboard:dataset-select-modal") {
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
@@ -783,7 +922,8 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
     }
 
     await interaction.editReply(truncate([
-      `Dataset: ${dataset.id}`,
+      `Dataset: ${dataset.source_name ?? dataset.id}`,
+      `ID: ${dataset.id}`,
       `Status: ${dataset.status}`,
       `Source: ${dataset.source_type} ${dataset.source_path}`,
       `Counts: raw=${dataset.raw_count ?? 0} valid=${dataset.valid_count ?? 0} duplicate=${dataset.duplicate_count ?? 0} error=${dataset.error_count ?? 0}`,
