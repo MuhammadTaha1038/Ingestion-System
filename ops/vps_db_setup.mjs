@@ -106,21 +106,27 @@ async function main() {
     );
 
     // ─── Step 4: Install pg_dump client tools for Neon dump ──────────────────
+    // Ensure we have a pg_dump compatible with the Neon server (Postgres 18).
+    // Add the PostgreSQL APT repo and install postgresql-client-18 if needed.
+    // Try to install postgresql-client-18 (pg_dump v18) from the PGDG repo so it's compatible with Neon 18.
     await runCommand(conn,
-      `which pg_dump || (DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql-client)`,
-      "Ensure pg_dump available"
+      `(apt-get update -y && apt-get install -y wget ca-certificates gnupg) || true && \
+      curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/pgdg.gpg || true && \
+      echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt/ noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list || true && \
+      apt-get update -y || true && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql-client-18 postgresql-client || true`,
+      "Ensure postgresql-client-18 is installed (best-effort)"
     );
 
     // ─── Step 5: Dump Neon → restore into VPS (all on the server) ────────────
     console.log("\n[Dump & Restore] Dumping from Neon and restoring to VPS PostgreSQL...");
     const dumpAndRestore = `
-PGPASSWORD="" pg_dump "${NEON_URL}" \\
-  --no-owner --no-acl --format=plain \\
-  2>/tmp/dump_err.log | \\
-PGPASSWORD="${VPS_DB_PASS}" psql -U ${VPS_DB_USER} -h localhost -d ${VPS_DB_NAME} 2>/tmp/restore_err.log
-echo "Exit: $?"
-cat /tmp/dump_err.log 2>/dev/null | head -20 || true
-cat /tmp/restore_err.log 2>/dev/null | head -20 || true
+if [ -x /usr/lib/postgresql/18/bin/pg_dump ]; then DUMP=/usr/lib/postgresql/18/bin/pg_dump; else DUMP=$(which pg_dump || echo pg_dump); fi; \
+PGPASSWORD="" $DUMP "${NEON_URL}" --no-owner --no-acl --format=plain 2>/tmp/dump_err.log | \
+PGPASSWORD="${VPS_DB_PASS}" psql -U ${VPS_DB_USER} -h localhost -d ${VPS_DB_NAME} 2>/tmp/restore_err.log; \
+echo "Exit: $?"; \
+cat /tmp/dump_err.log 2>/dev/null | head -40 || true; \
+cat /tmp/restore_err.log 2>/dev/null | head -40 || true;
 `;
     await runCommand(conn, dumpAndRestore, "Dump Neon → Restore VPS");
 
