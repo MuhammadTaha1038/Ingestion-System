@@ -92,10 +92,11 @@ const createShortCustomId = (prefix: string, value: string): string => {
   const token = createHash("sha256").update(raw).digest("hex").slice(0, 16);
   const customId = `${prefix}:h:${token}`;
   customIdMap.set(customId, raw);
-  // persist mapping asynchronously
+  // persist mapping asynchronously with 7-day expiry
   (async () => {
     try {
-      await buttonIdRepo.upsert(token, raw);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      await buttonIdRepo.upsert(token, raw, expiresAt);
     } catch (err) {
       logger.warn("failed to persist customId mapping", { error: String(err), customId });
     }
