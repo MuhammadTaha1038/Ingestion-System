@@ -8,6 +8,7 @@ import { JobRepository } from "../db/repositories/jobs.js";
 import { HierarchyRepository } from "../db/repositories/hierarchy.js";
 import { WindowSettingsRepository } from "../db/repositories/windowSettings.js";
 import { TestRecipientRepository } from "../db/repositories/testRecipient.js";
+import { ButtonIdMapRepository } from "../db/repositories/buttonIdMap.js";
 import { getDatabasePool } from "../db/pool.js";
 import { jobStore } from "../jobs/store.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
@@ -80,6 +81,7 @@ let latestTestRecipientEmail: string | null = null;
 
 const MAX_CUSTOM_ID_LENGTH = 100;
 const customIdMap = new Map<string, string>();
+const buttonIdRepo = new ButtonIdMapRepository();
 
 const createShortCustomId = (prefix: string, value: string): string => {
   const raw = `${prefix}:${value}`;
@@ -90,17 +92,37 @@ const createShortCustomId = (prefix: string, value: string): string => {
   const token = createHash("sha256").update(raw).digest("hex").slice(0, 16);
   const customId = `${prefix}:h:${token}`;
   customIdMap.set(customId, raw);
+  // persist mapping asynchronously
+  (async () => {
+    try {
+      await buttonIdRepo.upsert(token, raw);
+    } catch (err) {
+      logger.warn("failed to persist customId mapping", { error: String(err), customId });
+    }
+  })();
   return customId;
 };
 
-const resolveShortCustomId = (customId: string, prefix: string): string | null => {
+const resolveShortCustomId = async (customId: string, prefix: string): Promise<string | null> => {
   if (!customId.startsWith(`${prefix}:`)) {
     return null;
   }
 
   const suffix = customId.slice(prefix.length + 1);
   if (suffix.startsWith("h:")) {
-    return customIdMap.get(customId) ?? null;
+    const mem = customIdMap.get(customId);
+    if (mem) return mem;
+    const token = suffix.slice(2);
+    try {
+      const persisted = await buttonIdRepo.get(token);
+      if (persisted) {
+        customIdMap.set(customId, persisted);
+        return persisted;
+      }
+    } catch (err) {
+      logger.warn("failed to lookup customId mapping", { error: String(err), customId });
+    }
+    return null;
   }
 
   return suffix;
@@ -158,7 +180,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   if (interaction.customId && (interaction.customId.startsWith("stp:") || interaction.customId.startsWith("stp:h:"))) {
     logger.info("early stp check", { customId: interaction.customId });
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = resolveShortCustomId(interaction.customId, "stp") ?? interaction.customId.slice("stp:".length);
+    const campaignId = (await resolveShortCustomId(interaction.customId, "stp")) ?? interaction.customId.slice("stp:".length);
     logger.info("send-test campaign pick early received", { campaignId, latestTestRecipientEmail });
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
@@ -392,7 +414,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   // Handle dynamic pick buttons: dataset pick and campaign pick
   if (interaction.customId.startsWith("dashboard:campaign-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = resolveShortCustomId(interaction.customId, "dashboard:campaign-pick") ?? interaction.customId.slice("dashboard:campaign-pick:".length);
+    const campaignId = (await resolveShortCustomId(interaction.customId, "dashboard:campaign-pick")) ?? interaction.customId.slice("dashboard:campaign-pick:".length);
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
       return;
@@ -422,7 +444,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
   if (interaction.customId.startsWith("dashboard:dataset-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const datasetId = resolveShortCustomId(interaction.customId, "dashboard:dataset-pick") ?? interaction.customId.slice("dashboard:dataset-pick:".length);
+    const datasetId = (await resolveShortCustomId(interaction.customId, "dashboard:dataset-pick")) ?? interaction.customId.slice("dashboard:dataset-pick:".length);
     if (!datasetId) {
       await interaction.editReply("dataset_id_required");
       return;
@@ -476,7 +498,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   // Step 2 of Run Campaign: campaign selected → show dataset picker
   if (interaction.customId.startsWith("dashboard:run-campaign-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = resolveShortCustomId(interaction.customId, "dashboard:run-campaign-pick") ?? interaction.customId.slice("dashboard:run-campaign-pick:".length);
+    const campaignId = (await resolveShortCustomId(interaction.customId, "dashboard:run-campaign-pick")) ?? interaction.customId.slice("dashboard:run-campaign-pick:".length);
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
       return;
@@ -515,7 +537,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:")) {
       remainder = interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
     } else {
-      remainder = resolveShortCustomId(interaction.customId, "rcdp");
+            remainder = (await resolveShortCustomId(interaction.customId, "rcdp"));
     }
 
     if (!remainder) {
@@ -1119,7 +1141,7 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
   // Send-test pick from campaign buttons (prefix stp:)
   if (interaction.customId.startsWith("stp:")) {
     await interaction.deferReply({ ephemeral: true });
-    const campaignId = resolveShortCustomId(interaction.customId, "stp") ?? interaction.customId.slice("stp:".length);
+    const campaignId = (await resolveShortCustomId(interaction.customId, "stp")) ?? interaction.customId.slice("stp:".length);
     logger.info("send-test campaign pick received", { campaignId, latestTestRecipientEmail });
     if (!campaignId) {
       await interaction.editReply("campaign_id_required");
