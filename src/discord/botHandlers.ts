@@ -6,6 +6,7 @@ import { SmtpRepository } from "../db/repositories/smtp.js";
 import { JobRepository } from "../db/repositories/jobs.js";
 import { HierarchyRepository } from "../db/repositories/hierarchy.js";
 import { WindowSettingsRepository } from "../db/repositories/windowSettings.js";
+import { TestRecipientRepository } from "../db/repositories/testRecipient.js";
 import { getDatabasePool } from "../db/pool.js";
 import { jobStore } from "../jobs/store.js";
 import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
@@ -75,6 +76,19 @@ import {
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
 let latestTestRecipientEmail: string | null = null;
+
+// load persisted latest test recipient on demand
+const testRecipientRepo = new TestRecipientRepository();
+const ensureLatestRecipientLoaded = async () => {
+  if (!latestTestRecipientEmail) {
+    try {
+      const persisted = await testRecipientRepo.getLatest();
+      if (persisted) latestTestRecipientEmail = persisted;
+    } catch (e) {
+      logger.warn("failed to load persisted test recipient", { error: String(e) });
+    }
+  }
+};
 
 const getLatestFailedSendingJob = async (): Promise<{ id: string; error: string | null; finishedAt: string | null } | null> => {
   const pool = getDatabasePool();
@@ -996,6 +1010,11 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       return;
     }
     latestTestRecipientEmail = email;
+    try {
+      await testRecipientRepo.setLatest(email);
+    } catch (e) {
+      logger.warn("failed to persist test recipient", { error: String(e) });
+    }
     await interaction.editReply(`latest_test_recipient_set_to ${email}`);
     return;
   }
@@ -1009,7 +1028,55 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       return;
     }
     latestTestRecipientEmail = email;
+    try {
+      await testRecipientRepo.setLatest(email);
+    } catch (e) {
+      logger.warn("failed to persist test recipient", { error: String(e) });
+    }
+
+    // If no campaign provided, show a campaign-pick UI so user can select from the dashboard
+    if (!campaignId) {
+      if (!config.databaseUrl) {
+        await interaction.editReply("db_required");
+        return;
+      }
+      const pool = getDatabasePool();
+      const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+      if (!res.rows || res.rows.length === 0) {
+        // No campaign — perform a plain ingestion without a campaign
+        const message = await queueDashboardIngestion({ format: "auto", content: email });
+        await interaction.editReply(message);
+        return;
+      }
+
+      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+      const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(`stp:${r.id}`).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Primary));
+      for (let i = 0; i < buttons.length; i += 5) {
+        rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
+      }
+      await interaction.editReply({ content: "Select a campaign to send this test email with:", components: rows });
+      return;
+    }
+
     const message = await queueDashboardIngestion({ format: "auto", content: email, campaignId });
+    await interaction.editReply(message);
+    return;
+  }
+
+  // Send-test pick from campaign buttons (prefix stp:)
+  if (interaction.customId.startsWith("stp:")) {
+    await interaction.deferReply({ ephemeral: true });
+    const campaignId = interaction.customId.slice("stp:".length);
+    if (!campaignId) {
+      await interaction.editReply("campaign_id_required");
+      return;
+    }
+    await ensureLatestRecipientLoaded();
+    if (!latestTestRecipientEmail) {
+      await interaction.editReply("no_test_recipient_available");
+      return;
+    }
+    const message = await queueDashboardIngestion({ format: "auto", content: latestTestRecipientEmail, campaignId });
     await interaction.editReply(message);
     return;
   }
