@@ -424,9 +424,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    // use short prefix to avoid exceeding Discord customId length limit
+    const prefix = `rcdp:`;
     const buttons = datasets.slice(0, 25).map((d) =>
       new ButtonBuilder()
-        .setCustomId(`dashboard:run-campaign-dataset-pick:${campaignId}:${d.id}`)
+        .setCustomId(`${prefix}${campaignId}:${d.id}`)
         .setLabel((d.source_name ?? String(d.id)).slice(0, 80))
         .setStyle(ButtonStyle.Primary)
     );
@@ -440,7 +442,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   // Step 3 of Run Campaign: dataset selected → trigger send directly
   if (interaction.customId.startsWith("dashboard:run-campaign-dataset-pick:")) {
     await interaction.deferReply({ ephemeral: true });
-    const remainder = interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
+    // support the shorter prefix used when creating buttons
+    const shortPrefix = "rcdp:";
+    const remainder = interaction.customId.startsWith(shortPrefix)
+      ? interaction.customId.slice(shortPrefix.length)
+      : interaction.customId.slice("dashboard:run-campaign-dataset-pick:".length);
     // remainder is campaignId:datasetId — datasetId is a UUID so split at first colon after the campaign UUID
     const uuidLen = 36;
     const campaignId = remainder.slice(0, uuidLen);
