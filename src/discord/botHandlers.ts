@@ -154,6 +154,33 @@ const getInteractionReplyMethod = async (interaction: ButtonInteraction | ModalS
 
 export const handleButtonInteraction = async (interaction: ButtonInteraction): Promise<void> => {
   logger.info("button interaction received", { customId: interaction.customId, user: interaction.user?.id });
+  // Early handler for send-test campaign pick to avoid ordering issues
+  if (interaction.customId && (interaction.customId.startsWith("stp:") || interaction.customId.startsWith("stp:h:"))) {
+    logger.info("early stp check", { customId: interaction.customId });
+    await interaction.deferReply({ ephemeral: true });
+    const campaignId = resolveShortCustomId(interaction.customId, "stp") ?? interaction.customId.slice("stp:".length);
+    logger.info("send-test campaign pick early received", { campaignId, latestTestRecipientEmail });
+    if (!campaignId) {
+      await interaction.editReply("campaign_id_required");
+      return;
+    }
+    await ensureLatestRecipientLoaded();
+    if (!latestTestRecipientEmail) {
+      await interaction.editReply("no_test_recipient_available");
+      return;
+    }
+    let message;
+    try {
+      message = await queueDashboardIngestion({ format: "auto", content: latestTestRecipientEmail, campaignId });
+    } catch (err) {
+      logger.error("send-test ingestion failed (early)", { error: String(err), campaignId, latestTestRecipientEmail });
+      await interaction.editReply("send_test_ingestion_error");
+      return;
+    }
+    logger.info("send-test ingestion queued (early)", { campaignId, message });
+    await interaction.editReply(message);
+    return;
+  }
   if (interaction.customId === dashboardButtonIds.ingest) {
     await interaction.showModal(createIngestModal());
     return;
