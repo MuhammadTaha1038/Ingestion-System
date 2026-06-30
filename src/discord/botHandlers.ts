@@ -943,6 +943,31 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
+  // Final fallback: handle smtp-toggle if still not processed
+  if (interaction.customId && interaction.customId.includes("dashboard:smtp-toggle")) {
+    logger.info("fallback smtp-toggle handler", { customId: interaction.customId, user: interaction.user?.id });
+    const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
+    if (id) {
+      try {
+        const repo = new SmtpRepository();
+        const pool = getDatabasePool();
+        const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
+        if (res.rows[0]) {
+          const acc = res.rows[0];
+          if (acc.status === "active") await repo.disableSmtpAccount(id); else await repo.enableSmtpAccount(id);
+          const list = await repo.listAllAccounts();
+          const rows = [];
+          const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
+          for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          return;
+        }
+      } catch (err) {
+        logger.error("fallback smtp-toggle failed", { error: String(err), customId: interaction.customId });
+      }
+    }
+  }
+
   logger.warn("unhandled button interaction", { customId: interaction.customId, user: interaction.user?.id });
   await interaction.reply({ content: "unhandled_button", ephemeral: true });
 };
