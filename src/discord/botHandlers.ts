@@ -183,7 +183,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     logger.info("early smtp-toggle catch", { customId: interaction.customId, user: interaction.user?.id });
     const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
     // acknowledge immediately to avoid Discord timing out for long-running validation
-    await interaction.deferUpdate();
+    try {
+      await interaction.deferUpdate();
+    } catch (e) {
+      logger.warn("deferUpdate failed (interaction may already be acknowledged)", { error: String(e), customId: interaction.customId });
+    }
 
     if (!id) {
       await interaction.followUp({ ephemeral: true, content: "smtp_id_required" });
@@ -776,7 +780,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
     // acknowledge the button interaction immediately to avoid timeouts
-    await interaction.deferUpdate();
+    try {
+      await interaction.deferUpdate();
+    } catch (e) {
+      logger.warn("deferUpdate failed (interaction may already be acknowledged)", { error: String(e), customId: interaction.customId });
+    }
     const pool = getDatabasePool();
     const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
     if (!res.rows[0]) {
