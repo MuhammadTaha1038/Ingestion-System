@@ -77,6 +77,11 @@ export const buildTransportOptions = (config: SmtpConnectionConfig, username: st
   auth: {
     user: username,
     pass: password
+  },
+  logger: true,
+  debug: true,
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
