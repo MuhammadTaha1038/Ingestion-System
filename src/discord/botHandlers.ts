@@ -177,6 +177,35 @@ const getInteractionReplyMethod = async (interaction: ButtonInteraction | ModalS
 
 export const handleButtonInteraction = async (interaction: ButtonInteraction): Promise<void> => {
   logger.info("button interaction received", { customId: interaction.customId, user: interaction.user?.id });
+  // Early catch for smtp toggle to ensure UI buttons are handled even if ordering changes
+  if (interaction.customId && interaction.customId.includes("smtp-toggle")) {
+    logger.info("early smtp-toggle catch", { customId: interaction.customId, user: interaction.user?.id });
+    const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
+    if (!id) {
+      await interaction.reply({ ephemeral: true, content: "smtp_id_required" });
+      return;
+    }
+    const pool = getDatabasePool();
+    const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
+    if (!res.rows[0]) {
+      await interaction.reply({ ephemeral: true, content: "smtp_account_not_found" });
+      return;
+    }
+    const acc = res.rows[0];
+    const repo = new SmtpRepository();
+    try {
+      if (acc.status === "active") await repo.disableSmtpAccount(id); else await repo.enableSmtpAccount(id);
+      const list = await repo.listAllAccounts();
+      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+      const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
+      for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+      await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+    } catch (err) {
+      logger.error("early smtp-toggle failed", { error: String(err), customId: interaction.customId });
+      await interaction.reply({ ephemeral: true, content: "smtp_toggle_failed" });
+    }
+    return;
+  }
   // Early handler for send-test campaign pick to avoid ordering issues
   if (interaction.customId && (interaction.customId.startsWith("stp:") || interaction.customId.startsWith("stp:h:"))) {
     logger.info("early stp check", { customId: interaction.customId });
