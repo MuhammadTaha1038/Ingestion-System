@@ -23,6 +23,9 @@ export const sendDirect = async (
     secure: cfg.secure ?? false,
     ignoreTLS: cfg.ignoreTLS ?? false,
     auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 
   const info = await transporter.sendMail({
