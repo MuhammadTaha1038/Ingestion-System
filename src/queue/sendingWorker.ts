@@ -22,7 +22,6 @@ export const startSendingWorker = (): void => {
       if (jobRepo) await jobRepo.markProcessing(String(job.id));
 
       const recipients = job.data.recipients ?? [];
-      const fromAddress = job.data.fromAddress;
       const replyTo = job.data.replyTo;
 
       if (recipients.length === 0) {
@@ -79,7 +78,6 @@ export const startSendingWorker = (): void => {
                 recipient.subject,
                 recipient.html ?? "",
                 recipient.text,
-                fromAddress,
                 replyTo
               );
             } else {

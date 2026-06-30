@@ -93,7 +93,6 @@ export const enqueueCampaignSendForDataset = async (args: {
       {
         campaignId: args.campaign.id,
         windowId: "",
-        fromAddress: args.campaign.smtp_account_email ?? undefined,
         replyTo: args.campaign.reply_to ?? undefined,
         recipients: batch,
         smtpAccountId: (args.campaign as any).smtp_account_id ?? undefined
@@ -139,7 +138,6 @@ export const sendSingleRecipientWithCampaign = async (args: {
     {
       campaignId: campaign.id,
       windowId: "",
-      fromAddress: campaign.smtp_account_email ?? undefined,
       replyTo: campaign.reply_to ?? undefined,
       recipients: [
         {

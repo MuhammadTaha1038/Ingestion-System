@@ -11,7 +11,6 @@ export const sendMail = async (
   subject: string,
   html: string,
   text?: string,
-  fromAddress?: string,
   replyTo?: string
 ) => {
   const res = await repo.pool.query("SELECT host, port, username, password_encrypted, use_tls FROM smtp_accounts WHERE id = $1", [smtpAccountId]);
@@ -33,7 +32,7 @@ export const sendMail = async (
   const transporter = nodemailer.createTransport(buildTransportOptions(validation.config, row.username, password));
 
   const info = await transporter.sendMail({
-    from: fromAddress ?? row.username,
+    from: row.username,
     replyTo: replyTo ?? undefined,
     to,
     subject,

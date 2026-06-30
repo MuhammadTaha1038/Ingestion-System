@@ -664,7 +664,6 @@ export const registerRoutes = (server: FastifyInstance): void => {
       values.push(body.body_text);
     }
 
-    // from_address is not user-configurable, skip if provided
 
     if (typeof body.reply_to === "string") {
       fields.push(`reply_to = $${fields.length + 1}`);
