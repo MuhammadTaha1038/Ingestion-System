@@ -215,7 +215,22 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
           for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
 
-          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          if (interaction.deferred || interaction.replied) {
+            try {
+              if (interaction.message && typeof interaction.message.edit === "function") {
+                await interaction.message.edit({ content: truncate(formatSmtpRows(list)), components: rows });
+              } else {
+                // fallback to editing the deferred reply
+                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+                // @ts-ignore
+                await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
+              }
+            } catch (e) {
+              logger.warn("failed to edit dashboard message", { error: String(e), customId: interaction.customId });
+            }
+          } else {
+            await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          }
           await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validation.error ?? "unknown_error"}` });
           return;
         }
@@ -234,7 +249,21 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       });
       for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
 
-      await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+      if (interaction.deferred || interaction.replied) {
+        try {
+          if (interaction.message && typeof interaction.message.edit === "function") {
+            await interaction.message.edit({ content: truncate(formatSmtpRows(list)), components: rows });
+          } else {
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
+          }
+        } catch (e) {
+          logger.warn("failed to edit dashboard message", { error: String(e), customId: interaction.customId });
+        }
+      } else {
+        await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+      }
     } catch (err) {
       logger.error("early smtp-toggle failed", { error: String(err), customId: interaction.customId });
       await interaction.followUp({ ephemeral: true, content: "smtp_toggle_failed" });
