@@ -471,6 +471,14 @@ export const createSmtpModal = (mode: "create" | "update") => {
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
+    const useTls = new TextInputBuilder()
+      .setCustomId("use_tls")
+      .setLabel("Use TLS (optional)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder("true or false")
+      .setValue("true");
+
     const port = new TextInputBuilder()
       .setCustomId("port")
       .setLabel("Port")
@@ -486,6 +494,7 @@ export const createSmtpModal = (mode: "create" | "update") => {
         new ActionRowBuilder<TextInputBuilder>().addComponents(host),
         new ActionRowBuilder<TextInputBuilder>().addComponents(username),
         new ActionRowBuilder<TextInputBuilder>().addComponents(password),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(useTls),
         new ActionRowBuilder<TextInputBuilder>().addComponents(port)
       );
   }

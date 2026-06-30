@@ -2,13 +2,19 @@ import { SmtpRepository } from "../db/repositories/smtp.js";
 import { decrypt } from "../security/crypto.js";
 import { loadConfig } from "../config/config.js";
 import { createLogger } from "../logging/logger.js";
+import { findWorkingSmtpConfig, SmtpConnectionConfig } from "./connection.js";
 
 const cfg = loadConfig();
 const logger = createLogger(cfg.logLevel);
 
 const DEFAULT_INTERVAL_MINUTES = 5;
 
-export const validateAccount = async (repo: SmtpRepository, accountId: string): Promise<{ id: string; ok: boolean; error?: string }> => {
+const normalizeDbConfig = (config: SmtpConnectionConfig): { port: number; useTls: boolean } => ({
+  port: config.port,
+  useTls: config.port === 465 ? false : config.requireTLS
+});
+
+export const validateAccount = async (repo: SmtpRepository, accountId: string): Promise<{ id: string; ok: boolean; error?: string; config?: SmtpConnectionConfig }> => {
   try {
     const res = await repo.pool.query(
       `SELECT id, host, port, username, password_encrypted, use_tls FROM smtp_accounts WHERE id = $1`,
@@ -18,42 +24,12 @@ export const validateAccount = async (repo: SmtpRepository, accountId: string): 
     if (!row) return { id: accountId, ok: false, error: "not_found" };
 
     const password = decrypt(row.password_encrypted);
-    const secure = row.port === 465;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const connectionImport = await import("nodemailer/lib/smtp-connection");
-    const SMTPConnection = (connectionImport.default ?? connectionImport) as any;
-    const connection = new SMTPConnection({
-      host: row.host,
-      port: row.port,
-      secure,
-      requireTLS: row.use_tls && !secure,
-      connectionTimeout: 10000,
-      greetingTimeout: 5000,
-      socketTimeout: 20000
-    });
+    const validation = await findWorkingSmtpConfig(row.host, row.port, row.use_tls, row.username, password);
+    if (!validation.ok) {
+      return { id: accountId, ok: false, error: validation.error };
+    }
 
-    await new Promise<void>((resolve, reject) => {
-      connection.connect((connectErr: Error | null) => {
-        if (connectErr) {
-          connection.close();
-          return reject(connectErr);
-        }
-
-        connection.login({ user: row.username, pass: password }, (loginErr: Error | null) => {
-          if (loginErr) {
-            connection.close();
-            return reject(loginErr);
-          }
-
-          connection.quit(() => {
-            connection.close();
-            resolve();
-          });
-        });
-      });
-    });
-
-    return { id: accountId, ok: true };
+    return { id: accountId, ok: true, config: validation.config };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { id: accountId, ok: false, error: message };
@@ -64,6 +40,15 @@ export const validateAndUpdateAccountStatus = async (repo: SmtpRepository, accou
   const result = await validateAccount(repo, accountId);
   if (result.ok) {
     await repo.enableSmtpAccount(accountId);
+    if (result.config) {
+      const normalized = normalizeDbConfig(result.config);
+      await repo.updateSmtpAccount(accountId, normalized);
+      logger.info("smtp-validator: account config auto-corrected", {
+        id: accountId,
+        hostPort: `${result.config.host}:${result.config.port}`,
+        useTls: normalized.useTls
+      });
+    }
   } else {
     await repo.disableSmtpAccount(accountId);
   }

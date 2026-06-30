@@ -1010,7 +1010,12 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
         const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
         if (res.rows[0]) {
           const acc = res.rows[0];
-          if (acc.status === "active") await repo.disableSmtpAccount(id); else await repo.enableSmtpAccount(id);
+          if (acc.status === "active") {
+            await repo.disableSmtpAccount(id);
+          } else {
+            const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+            await validateAndUpdateAccountStatus(repo, id);
+          }
           const list = await repo.listAllAccounts();
           const rows = [];
           const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
@@ -1393,6 +1398,7 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
       const host = interaction.fields.getTextInputValue("host").trim();
       const username = interaction.fields.getTextInputValue("username").trim();
       const password = interaction.fields.getTextInputValue("password").trim();
+      const useTlsText = interaction.fields.getTextInputValue("use_tls").trim();
       const portText = interaction.fields.getTextInputValue("port").trim();
 
       if (!emailAccountId || !host || !username || !password || !portText) {
@@ -1406,7 +1412,7 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
         return;
       }
 
-      const useTls = port === 465 || port === 587;
+      const useTls = ["true", "1", "yes", "y"].includes(useTlsText.toLowerCase()) || port === 465 || port === 587;
       const createdId = await repo.createSmtpAccount({
         emailAccountId,
         host,
@@ -1929,7 +1935,12 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
   if (commandName === "smtp-enable") {
     const id = options.getString("id", true);
     const repo = new SmtpRepository();
-    await repo.enableSmtpAccount(id);
+    const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+    const validation = await validateAndUpdateAccountStatus(repo, id);
+    if (!validation.ok) {
+      await commandInteraction.editReply(`smtp enable failed: ${validation.error ?? "invalid_credentials"}`);
+      return;
+    }
     await commandInteraction.editReply(`enabled ${id}`);
     return;
   }

@@ -304,7 +304,7 @@ export const registerRoutes = (server: FastifyInstance): void => {
     const port = Number(body?.port ?? 587);
     const username = body?.username as string | undefined;
     const password = body?.password as string | undefined;
-    const useTls = typeof body?.useTls === "boolean" ? body.useTls : port === 465;
+    const useTls = typeof body?.useTls === "boolean" ? body.useTls : port === 465 || port === 587;
     const maxPerWindow = Number(body?.maxPerWindow ?? 50);
     const maxConcurrent = Number(body?.maxConcurrent ?? 1);
 

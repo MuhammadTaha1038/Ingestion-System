@@ -222,7 +222,7 @@ export const ingestParsedAccounts = async (args: IngestSmtpAccountsArgs) => {
         port,
         username: acc.username,
         passwordEncrypted: encrypted,
-        useTls: typeof acc.useTls === "boolean" ? acc.useTls : port === 465,
+        useTls: typeof acc.useTls === "boolean" ? acc.useTls : port === 465 || port === 587,
         maxPerWindow: acc.maxPerWindow ?? 50,
         maxConcurrent: acc.maxConcurrent ?? 1
       });
