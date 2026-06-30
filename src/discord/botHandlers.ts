@@ -743,8 +743,8 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       await interaction.reply({ ephemeral: true, content: "smtp_id_required" });
       return;
     }
-    // defer reply since validation may take longer than Discord's 3s limit
-    await interaction.deferReply({ ephemeral: true });
+    // acknowledge the button interaction immediately to avoid timeouts
+    await interaction.deferUpdate();
     const pool = getDatabasePool();
     const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
     if (!res.rows[0]) {
@@ -1038,8 +1038,8 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
     if (id) {
       try {
-        // defer reply to keep the interaction alive while we validate
-        await interaction.deferReply({ ephemeral: true });
+        // acknowledge the button interaction immediately to avoid timeouts
+        await interaction.deferUpdate();
         const repo = new SmtpRepository();
         const pool = getDatabasePool();
         const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
