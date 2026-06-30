@@ -83,39 +83,44 @@ const connectAndLogin = async (config: SmtpConnectionConfig, username: string, p
     let settled = false;
 
     const cleanup = () => {
-      connection.removeAllListeners("error");
+      connection.removeListener("error", onError);
+      connection.removeListener("close", onClose);
     };
 
-    const fail = (err: Error) => {
+    const onError = (err: Error) => {
       if (settled) return;
       settled = true;
-      cleanup();
       connection.close();
+      cleanup();
       reject(err);
     };
 
-    const succeed = () => {
+    const onClose = () => {
+      cleanup();
       if (settled) return;
       settled = true;
-      cleanup();
-      connection.close();
       resolve();
     };
 
-    connection.once("error", fail);
+    connection.once("error", onError);
+    connection.once("close", onClose);
 
     connection.connect((connectErr: Error | null) => {
       if (connectErr) {
-        return fail(connectErr);
+        return onError(connectErr);
       }
 
       connection.login({ user: username, pass: password }, (loginErr: Error | null) => {
         if (loginErr) {
-          return fail(loginErr);
+          return onError(loginErr);
         }
 
-        connection.quit(() => {
-          succeed();
+        connection.quit((quitErr: Error | null) => {
+          if (quitErr) {
+            return onError(quitErr);
+          }
+
+          // wait for close event to resolve successfully
         });
       });
     });
