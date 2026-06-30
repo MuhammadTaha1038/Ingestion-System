@@ -203,10 +203,14 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     const repo = new SmtpRepository();
     try {
       if (acc.status === "active") {
+        logger.info("disabling smtp account (dashboard)", { id });
         await repo.disableSmtpAccount(id);
+        logger.info("disabled smtp account (dashboard)", { id });
       } else {
+        logger.info("enabling smtp account (dashboard) - starting validation", { id });
         const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
         const validation = await validateAndUpdateAccountStatus(repo, id);
+        logger.info("enabling smtp account (dashboard) - validation result", { id, ok: validation.ok, error: validation.error });
         if (!validation.ok) {
           const list = await repo.listAllAccounts();
           const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
@@ -1087,14 +1091,18 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
           const acc = res.rows[0];
           let validationError: string | undefined;
           if (acc.status === "active") {
-            await repo.disableSmtpAccount(id);
-          } else {
-            const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
-            const validation = await validateAndUpdateAccountStatus(repo, id);
-            if (!validation.ok) {
-              validationError = validation.error ?? "smtp_enable_failed";
+              logger.info("disabling smtp account (fallback)", { id });
+              await repo.disableSmtpAccount(id);
+              logger.info("disabled smtp account (fallback)", { id });
+            } else {
+              logger.info("enabling smtp account (fallback) - starting validation", { id });
+              const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+              const validation = await validateAndUpdateAccountStatus(repo, id);
+              logger.info("enabling smtp account (fallback) - validation result", { id, ok: validation.ok, error: validation.error });
+              if (!validation.ok) {
+                validationError = validation.error ?? "smtp_enable_failed";
+              }
             }
-          }
           const list = await repo.listAllAccounts();
           const rows = [];
           const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
