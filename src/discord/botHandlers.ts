@@ -627,7 +627,58 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     if (interaction.customId === dashboardButtonIds.smtpList) {
       const repo = new SmtpRepository();
       const list = await repo.listAllAccounts();
-      await interaction.editReply(truncate(formatSmtpRows(list)));
+      if (!list || list.length === 0) {
+        await interaction.editReply("No SMTP accounts configured.");
+        return;
+      }
+
+      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+      const buttons = list.map((acc) => {
+        const action = acc.status === "active" ? "disable" : "enable";
+        const label = `${action === "disable" ? "Disable" : "Enable"} ${acc.username}@${acc.host}`;
+        const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
+        return new ButtonBuilder()
+          .setCustomId(createShortCustomId("dashboard:smtp-toggle", String(acc.id)))
+          .setLabel(label.slice(0, 80))
+          .setStyle(style);
+      });
+
+      for (let i = 0; i < buttons.length; i += 5) {
+        rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+      }
+
+      await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
+      return;
+    }
+
+    // Handle enable/disable toggle buttons for SMTP accounts
+    if (interaction.customId.startsWith("dashboard:smtp-toggle:") || interaction.customId.startsWith("dashboard:smtp-toggle:h:") ) {
+      await interaction.deferReply({ ephemeral: true });
+      const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.slice("dashboard:smtp-toggle:".length);
+      if (!id) {
+        await interaction.editReply("smtp_id_required");
+        return;
+      }
+      const pool = getDatabasePool();
+      const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
+      if (!res.rows[0]) {
+        await interaction.editReply("smtp_account_not_found");
+        return;
+      }
+      const acc = res.rows[0];
+      const repo = new SmtpRepository();
+      try {
+        if (acc.status === "active") {
+          await repo.disableSmtpAccount(id);
+          await interaction.editReply(`Disabled SMTP account ${acc.username}@${acc.host}`);
+        } else {
+          await repo.enableSmtpAccount(id);
+          await interaction.editReply(`Enabled SMTP account ${acc.username}@${acc.host}`);
+        }
+      } catch (err) {
+        logger.error("failed to toggle smtp account", { error: String(err), id });
+        await interaction.editReply("smtp_toggle_failed");
+      }
       return;
     }
 
