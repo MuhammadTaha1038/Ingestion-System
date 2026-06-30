@@ -182,14 +182,17 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   if (interaction.customId && interaction.customId.includes("smtp-toggle")) {
     logger.info("early smtp-toggle catch", { customId: interaction.customId, user: interaction.user?.id });
     const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
+    // acknowledge immediately to avoid Discord timing out for long-running validation
+    await interaction.deferUpdate();
+
     if (!id) {
-      await interaction.reply({ ephemeral: true, content: "smtp_id_required" });
+      await interaction.followUp({ ephemeral: true, content: "smtp_id_required" });
       return;
     }
     const pool = getDatabasePool();
     const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
     if (!res.rows[0]) {
-      await interaction.reply({ ephemeral: true, content: "smtp_account_not_found" });
+      await interaction.followUp({ ephemeral: true, content: "smtp_account_not_found" });
       return;
     }
     const acc = res.rows[0];
@@ -234,7 +237,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
     } catch (err) {
       logger.error("early smtp-toggle failed", { error: String(err), customId: interaction.customId });
-      await interaction.reply({ ephemeral: true, content: "smtp_toggle_failed" });
+      await interaction.followUp({ ephemeral: true, content: "smtp_toggle_failed" });
     }
     return;
   }
