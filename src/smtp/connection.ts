@@ -80,21 +80,42 @@ const connectAndLogin = async (config: SmtpConnectionConfig, username: string, p
   } as any);
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+
+    const cleanup = () => {
+      connection.removeAllListeners("error");
+    };
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      connection.close();
+      reject(err);
+    };
+
+    const succeed = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      connection.close();
+      resolve();
+    };
+
+    connection.once("error", fail);
+
     connection.connect((connectErr: Error | null) => {
       if (connectErr) {
-        connection.close();
-        return reject(connectErr);
+        return fail(connectErr);
       }
 
       connection.login({ user: username, pass: password }, (loginErr: Error | null) => {
         if (loginErr) {
-          connection.close();
-          return reject(loginErr);
+          return fail(loginErr);
         }
 
         connection.quit(() => {
-          connection.close();
-          resolve();
+          succeed();
         });
       });
     });
