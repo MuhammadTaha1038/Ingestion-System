@@ -676,6 +676,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
   // Handle enable/disable toggle buttons for SMTP accounts (global)
   if (interaction.customId.startsWith("dashboard:smtp-toggle")) {
+    logger.info("smtp toggle handler invoked", { customId: interaction.customId, user: interaction.user?.id });
     const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.slice("dashboard:smtp-toggle:".length);
     if (!id) {
       await interaction.reply({ ephemeral: true, content: "smtp_id_required" });
