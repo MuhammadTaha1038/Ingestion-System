@@ -528,8 +528,13 @@ export const registerRoutes = (server: FastifyInstance): void => {
 
     try {
       const smtpRepo = new (await import("../../db/repositories/smtp.js")).SmtpRepository();
-      await smtpRepo.enableSmtpAccount(id);
-      reply.send(ok({ id }));
+      const { validateAndUpdateAccountStatus } = await import("../../smtp/validator.js");
+      const validation = await validateAndUpdateAccountStatus(smtpRepo, id);
+      if (!validation.ok) {
+        reply.code(400).send({ error: "smtp_enable_failed", validationError: validation.error });
+        return;
+      }
+      reply.send(ok({ id, status: "active" }));
     } catch (err) {
       reply.code(500).send({ error: "internal_error" });
     }

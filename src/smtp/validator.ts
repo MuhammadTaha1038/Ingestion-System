@@ -1,4 +1,3 @@
-import nodemailer from "nodemailer";
 import { SmtpRepository } from "../db/repositories/smtp.js";
 import { decrypt } from "../security/crypto.js";
 import { loadConfig } from "../config/config.js";
@@ -19,23 +18,41 @@ export const validateAccount = async (repo: SmtpRepository, accountId: string): 
     if (!row) return { id: accountId, ok: false, error: "not_found" };
 
     const password = decrypt(row.password_encrypted);
-
     const secure = row.port === 465;
-    const transporter = nodemailer.createTransport({
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const connectionImport = await import("nodemailer/lib/smtp-connection");
+    const SMTPConnection = (connectionImport.default ?? connectionImport) as any;
+    const connection = new SMTPConnection({
       host: row.host,
       port: row.port,
       secure,
       requireTLS: row.use_tls && !secure,
-      auth: {
-        user: row.username,
-        pass: password
-      },
       connectionTimeout: 10000,
       greetingTimeout: 5000,
       socketTimeout: 20000
     });
 
-    await transporter.verify();
+    await new Promise<void>((resolve, reject) => {
+      connection.connect((connectErr: Error | null) => {
+        if (connectErr) {
+          connection.close();
+          return reject(connectErr);
+        }
+
+        connection.login({ user: row.username, pass: password }, (loginErr: Error | null) => {
+          if (loginErr) {
+            connection.close();
+            return reject(loginErr);
+          }
+
+          connection.quit(() => {
+            connection.close();
+            resolve();
+          });
+        });
+      });
+    });
+
     return { id: accountId, ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

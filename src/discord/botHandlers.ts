@@ -31,6 +31,7 @@ import {
   createCampaignDeleteConfirmModal,
   createSmtpModal,
   createSmtpDeleteModal,
+  createSmtpDeleteConfirmModal,
   createHierarchyModal,
   createHierarchyRecord,
   ingestModalId,
@@ -723,7 +724,26 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       if (acc.status === "active") {
         await repo.disableSmtpAccount(id);
       } else {
-        await repo.enableSmtpAccount(id);
+        const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+        const validation = await validateAndUpdateAccountStatus(repo, id);
+        if (!validation.ok) {
+          const list = await repo.listAllAccounts();
+          const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+          const buttons = list.map((a) => {
+            const action = a.status === "active" ? "disable" : "enable";
+            const label = `${action === "disable" ? "Disable" : "Enable"} ${a.username}@${a.host}`;
+            const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
+            return new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(label.slice(0, 80)).setStyle(style);
+          });
+
+          for (let i = 0; i < buttons.length; i += 5) {
+            rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+          }
+
+          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validation.error ?? "unknown_error"}` });
+          return;
+        }
       }
 
       // Refresh list in the original dashboard message
@@ -756,7 +776,43 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   if (interaction.customId === dashboardButtonIds.smtpDelete) {
-    await interaction.showModal(createSmtpDeleteModal());
+    await interaction.deferReply({ ephemeral: true });
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+
+    const repo = new SmtpRepository();
+    const list = await repo.listAllAccounts();
+    if (!list || list.length === 0) {
+      await interaction.editReply("No SMTP accounts configured.");
+      return;
+    }
+
+    const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+    const buttons = list.slice(0, 25).map((acc) =>
+      new ButtonBuilder()
+        .setCustomId(`dashboard:smtp-delete-pick:${acc.id}`)
+        .setLabel(`Delete ${acc.username}@${acc.host}`.slice(0, 80))
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    for (let i = 0; i < buttons.length; i += 5) {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+    }
+
+    await interaction.editReply({ content: "Select an SMTP account to delete:", components: rows });
+    return;
+  }
+
+  if (interaction.customId && interaction.customId.startsWith("dashboard:smtp-delete-pick:")) {
+    const smtpAccountId = interaction.customId.slice("dashboard:smtp-delete-pick:".length);
+    if (!smtpAccountId) {
+      await interaction.reply({ ephemeral: true, content: "smtp_account_id_required" });
+      return;
+    }
+
+    await interaction.showModal(createSmtpDeleteConfirmModal(smtpAccountId));
     return;
   }
 
@@ -1322,7 +1378,8 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
   if (
     interaction.customId === smtpCreateModalId ||
     interaction.customId === smtpUpdateModalId ||
-    interaction.customId === smtpDeleteModalId
+    interaction.customId === smtpDeleteModalId ||
+    interaction.customId.startsWith("dashboard:smtp-delete-confirm-modal:")
   ) {
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
@@ -1414,6 +1471,25 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
 
       await repo.deleteSmtpAccount(id);
       await interaction.editReply(`deleted smtp account ${id}`);
+      return;
+    }
+
+    if (interaction.customId.startsWith("dashboard:smtp-delete-confirm-modal:")) {
+      const smtpAccountId = interaction.customId.slice("dashboard:smtp-delete-confirm-modal:".length);
+      const confirm = interaction.fields.getTextInputValue("confirm").trim();
+
+      if (!smtpAccountId) {
+        await interaction.editReply("smtp_account_id_required_for_delete");
+        return;
+      }
+
+      if (confirm !== "DELETE") {
+        await interaction.editReply("delete_confirmation_required");
+        return;
+      }
+
+      await repo.deleteSmtpAccount(smtpAccountId);
+      await interaction.editReply(`deleted smtp account ${smtpAccountId}`);
       return;
     }
   }

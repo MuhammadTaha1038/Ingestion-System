@@ -52,6 +52,7 @@ export const dashboardButtonIds = {
   smtpCreate: "dashboard:smtp-create",
   smtpUpdate: "dashboard:smtp-update",
   smtpDelete: "dashboard:smtp-delete",
+  smtpDeletePick: "dashboard:smtp-delete-pick",
   smtpImport: "dashboard:smtp-import",
   storage: "dashboard:storage",
   pause: "dashboard:pause",
@@ -170,8 +171,8 @@ export const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.useTestRecipient).setLabel("Use Test Recipient").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.storage).setLabel("Storage").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),
@@ -531,6 +532,19 @@ export const createSmtpDeleteModal = () => {
       new ActionRowBuilder<TextInputBuilder>().addComponents(smtpId),
       new ActionRowBuilder<TextInputBuilder>().addComponents(confirm)
     );
+};
+
+export const createSmtpDeleteConfirmModal = (smtpAccountId: string) => {
+  const confirm = new TextInputBuilder()
+    .setCustomId("confirm")
+    .setLabel("Type DELETE to confirm deletion")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  return new ModalBuilder()
+    .setCustomId(`dashboard:smtp-delete-confirm-modal:${smtpAccountId}`)
+    .setTitle("Confirm SMTP Delete")
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(confirm));
 };
 
 export const parseSmtpUpdateText = (text: string) => {
