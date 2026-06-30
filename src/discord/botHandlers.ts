@@ -186,7 +186,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     try {
       await interaction.deferUpdate();
     } catch (e) {
-      logger.warn("deferUpdate failed (interaction may already be acknowledged)", { error: String(e), customId: interaction.customId });
+      logger.warn("deferUpdate failed", { error: String(e), customId: interaction.customId });
     }
 
     if (!id) {
@@ -202,6 +202,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     const acc = res.rows[0];
     const repo = new SmtpRepository();
     try {
+      let validationError: string | undefined;
       if (acc.status === "active") {
         logger.info("disabling smtp account (dashboard)", { id });
         await repo.disableSmtpAccount(id);
@@ -212,35 +213,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
         const validation = await validateAndUpdateAccountStatus(repo, id);
         logger.info("enabling smtp account (dashboard) - validation result", { id, ok: validation.ok, error: validation.error });
         if (!validation.ok) {
-          const list = await repo.listAllAccounts();
-          const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-          const buttons = list.map((a) =>
-            new ButtonBuilder()
-              .setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id)))
-              .setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80))
-              .setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success)
-          );
-
-          for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
-
-          if (interaction.deferred || interaction.replied) {
-            try {
-              if (interaction.message && typeof interaction.message.edit === "function") {
-                await interaction.message.edit({ content: truncate(formatSmtpRows(list)), components: rows });
-              } else {
-                // fallback to editing the deferred reply
-                // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-                // @ts-ignore
-                await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
-              }
-            } catch (e) {
-              logger.warn("failed to edit dashboard message", { error: String(e), customId: interaction.customId });
-            }
-          } else {
-            await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
-          }
-          await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validation.error ?? "unknown_error"}` });
-          return;
+          validationError = validation.error ?? "unknown_error";
         }
       }
 
@@ -257,20 +230,10 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       });
       for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
 
-      if (interaction.deferred || interaction.replied) {
-        try {
-          if (interaction.message && typeof interaction.message.edit === "function") {
-            await interaction.message.edit({ content: truncate(formatSmtpRows(list)), components: rows });
-          } else {
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
-            await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
-          }
-        } catch (e) {
-          logger.warn("failed to edit dashboard message", { error: String(e), customId: interaction.customId });
-        }
-      } else {
-        await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+      await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
+
+      if (validationError) {
+        await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validationError}` });
       }
     } catch (err) {
       logger.error("early smtp-toggle failed", { error: String(err), customId: interaction.customId });
@@ -776,76 +739,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   // Handle enable/disable toggle buttons for SMTP accounts (global)
-  if (interaction.customId.startsWith("dashboard:smtp-toggle")) {
-    logger.info("smtp toggle handler invoked", { customId: interaction.customId, user: interaction.user?.id });
-    const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.slice("dashboard:smtp-toggle:".length);
-    if (!id) {
-      await interaction.reply({ ephemeral: true, content: "smtp_id_required" });
-      return;
-    }
-    // acknowledge the button interaction immediately to avoid timeouts
-    try {
-      await interaction.deferUpdate();
-    } catch (e) {
-      logger.warn("deferUpdate failed (interaction may already be acknowledged)", { error: String(e), customId: interaction.customId });
-    }
-    const pool = getDatabasePool();
-    const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
-    if (!res.rows[0]) {
-      await interaction.reply({ ephemeral: true, content: "smtp_account_not_found" });
-      return;
-    }
-    const acc = res.rows[0];
-    const repo = new SmtpRepository();
-    try {
-      if (acc.status === "active") {
-        await repo.disableSmtpAccount(id);
-      } else {
-        const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
-        const validation = await validateAndUpdateAccountStatus(repo, id);
-        if (!validation.ok) {
-          const list = await repo.listAllAccounts();
-          const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-          const buttons = list.map((a) => {
-            const action = a.status === "active" ? "disable" : "enable";
-            const label = `${action === "disable" ? "Disable" : "Enable"} ${a.username}@${a.host}`;
-            const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
-            return new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(label.slice(0, 80)).setStyle(style);
-          });
-
-          for (let i = 0; i < buttons.length; i += 5) {
-            rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
-          }
-
-          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
-          await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validation.error ?? "unknown_error"}` });
-          return;
-        }
-      }
-
-      // Refresh list in the original dashboard message
-      const list = await repo.listAllAccounts();
-      const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = list.map((a) => {
-        const action = a.status === "active" ? "disable" : "enable";
-        const label = `${action === "disable" ? "Disable" : "Enable"} ${a.username}@${a.host}`;
-        const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
-        return new ButtonBuilder()
-          .setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id)))
-          .setLabel(label.slice(0, 80))
-          .setStyle(style);
-      });
-      for (let i = 0; i < buttons.length; i += 5) {
-        rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
-      }
-
-      await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
-    } catch (err) {
-      logger.error("failed to toggle smtp account", { error: String(err), id });
-      await interaction.reply({ ephemeral: true, content: "smtp_toggle_failed" });
-    }
-    return;
-  }
+  // (SMTP toggle handled by early catch above)
 
   if (interaction.customId === dashboardButtonIds.smtpUpdate) {
     await interaction.showModal(createSmtpModal("update"));
@@ -1077,47 +971,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
   }
 
   // Final fallback: handle smtp-toggle if still not processed
-  if (interaction.customId && interaction.customId.includes("dashboard:smtp-toggle")) {
-    logger.info("fallback smtp-toggle handler", { customId: interaction.customId, user: interaction.user?.id });
-    const id = (await resolveShortCustomId(interaction.customId, "dashboard:smtp-toggle")) ?? interaction.customId.split(":").slice(2).join(":");
-    if (id) {
-      try {
-        // acknowledge the button interaction immediately to avoid timeouts
-        await interaction.deferUpdate();
-        const repo = new SmtpRepository();
-        const pool = getDatabasePool();
-        const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
-        if (res.rows[0]) {
-          const acc = res.rows[0];
-          let validationError: string | undefined;
-          if (acc.status === "active") {
-              logger.info("disabling smtp account (fallback)", { id });
-              await repo.disableSmtpAccount(id);
-              logger.info("disabled smtp account (fallback)", { id });
-            } else {
-              logger.info("enabling smtp account (fallback) - starting validation", { id });
-              const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
-              const validation = await validateAndUpdateAccountStatus(repo, id);
-              logger.info("enabling smtp account (fallback) - validation result", { id, ok: validation.ok, error: validation.error });
-              if (!validation.ok) {
-                validationError = validation.error ?? "smtp_enable_failed";
-              }
-            }
-          const list = await repo.listAllAccounts();
-          const rows = [];
-          const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
-          for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
-          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
-          if (validationError) {
-            await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validationError}` });
-          }
-          return;
-        }
-      } catch (err) {
-        logger.error("fallback smtp-toggle failed", { error: String(err), customId: interaction.customId });
-      }
-    }
-  }
+  // (SMTP toggle handled by early catch above)
 
   logger.warn("unhandled button interaction", { customId: interaction.customId, user: interaction.user?.id });
   await interaction.reply({ content: "unhandled_button", ephemeral: true });

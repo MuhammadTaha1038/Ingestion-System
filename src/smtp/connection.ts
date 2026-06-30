@@ -17,10 +17,7 @@ export interface SmtpValidationResult {
   attempts: SmtpValidationAttempt[];
 }
 
-const loadSmtpConnection = async (): Promise<any> => {
-  const connectionImport = await import("nodemailer/lib/smtp-connection/index.js");
-  return connectionImport.default ?? connectionImport;
-};
+import nodemailer from "nodemailer";
 
 const formatConfig = (config: SmtpConnectionConfig): string => {
   return `host=${config.host} port=${config.port} secure=${config.secure} requireTLS=${config.requireTLS}`;
@@ -67,64 +64,25 @@ const buildCandidateConfigs = (host: string, port: number, useTls: boolean): Smt
   return configs;
 };
 
+export const buildTransportOptions = (config: SmtpConnectionConfig, username: string, password: string) => ({
+  host: config.host,
+  port: config.port,
+  secure: config.secure,
+  requireTLS: config.requireTLS,
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 30000,
+  disableFileAccess: true,
+  disableUrlAccess: true,
+  auth: {
+    user: username,
+    pass: password
+  }
+});
+
 const connectAndLogin = async (config: SmtpConnectionConfig, username: string, password: string): Promise<void> => {
-  const SMTPConnection = await loadSmtpConnection();
-  const connection = new SMTPConnection({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    requireTLS: config.requireTLS,
-    connectionTimeout: 10000,
-    greetingTimeout: 5000,
-    socketTimeout: 20000
-  } as any);
-
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-
-    const cleanup = () => {
-      connection.removeListener("error", onError);
-      connection.removeListener("close", onClose);
-    };
-
-    const onError = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      connection.close();
-      cleanup();
-      reject(err);
-    };
-
-    const onClose = () => {
-      cleanup();
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-
-    connection.once("error", onError);
-    connection.once("close", onClose);
-
-    connection.connect((connectErr: Error | null) => {
-      if (connectErr) {
-        return onError(connectErr);
-      }
-
-      connection.login({ user: username, pass: password }, (loginErr: Error | null) => {
-        if (loginErr) {
-          return onError(loginErr);
-        }
-
-        connection.quit((quitErr: Error | null) => {
-          if (quitErr) {
-            return onError(quitErr);
-          }
-
-          // wait for close event to resolve successfully
-        });
-      });
-    });
-  });
+  const transporter = nodemailer.createTransport(buildTransportOptions(config, username, password));
+  await transporter.verify();
 };
 
 export const findWorkingSmtpConfig = async (
@@ -150,19 +108,3 @@ export const findWorkingSmtpConfig = async (
   const message = attempts.map((attempt) => `${formatConfig(attempt.config)} => ${attempt.error}`).join(" | ");
   return { ok: false, error: `smtp_validation_failed: ${message}`, attempts };
 };
-
-export const buildTransportOptions = (config: SmtpConnectionConfig, username: string, password: string) => ({
-  host: config.host,
-  port: config.port,
-  secure: config.secure,
-  requireTLS: config.requireTLS,
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 30000,
-  disableFileAccess: true,
-  disableUrlAccess: true,
-  auth: {
-    user: username,
-    pass: password
-  }
-});
