@@ -89,7 +89,7 @@ export class SmtpRepository {
         params.port,
         params.username,
         params.passwordEncrypted,
-        typeof params.useTls === "boolean" ? params.useTls : params.port === 465,
+        typeof params.useTls === "boolean" ? params.useTls : params.port === 465 || params.port === 587,
         params.maxPerWindow ?? 50,
         params.maxConcurrent ?? 1
       ]

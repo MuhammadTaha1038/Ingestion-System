@@ -195,11 +195,42 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     const acc = res.rows[0];
     const repo = new SmtpRepository();
     try {
-      if (acc.status === "active") await repo.disableSmtpAccount(id); else await repo.enableSmtpAccount(id);
+      if (acc.status === "active") {
+        await repo.disableSmtpAccount(id);
+      } else {
+        const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+        const validation = await validateAndUpdateAccountStatus(repo, id);
+        if (!validation.ok) {
+          const list = await repo.listAllAccounts();
+          const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+          const buttons = list.map((a) =>
+            new ButtonBuilder()
+              .setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id)))
+              .setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80))
+              .setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success)
+          );
+
+          for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+
+          await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validation.error ?? "unknown_error"}` });
+          return;
+        }
+      }
+
       const list = await repo.listAllAccounts();
       const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
+      const buttons = list.map((a) => {
+        const action = a.status === "active" ? "disable" : "enable";
+        const label = `${action === "disable" ? "Disable" : "Enable"} ${a.username}@${a.host}`;
+        const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
+        return new ButtonBuilder()
+          .setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id)))
+          .setLabel(label.slice(0, 80))
+          .setStyle(style);
+      });
       for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+
       await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
     } catch (err) {
       logger.error("early smtp-toggle failed", { error: String(err), customId: interaction.customId });
@@ -1010,17 +1041,24 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
         const res = await pool.query(`SELECT id, username, host, status FROM smtp_accounts WHERE id = $1`, [id]);
         if (res.rows[0]) {
           const acc = res.rows[0];
+          let validationError: string | undefined;
           if (acc.status === "active") {
             await repo.disableSmtpAccount(id);
           } else {
             const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
-            await validateAndUpdateAccountStatus(repo, id);
+            const validation = await validateAndUpdateAccountStatus(repo, id);
+            if (!validation.ok) {
+              validationError = validation.error ?? "smtp_enable_failed";
+            }
           }
           const list = await repo.listAllAccounts();
           const rows = [];
           const buttons = list.map((a) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:smtp-toggle", String(a.id))).setLabel(`${a.status === "active" ? "Disable" : "Enable"} ${a.username}@${a.host}`.slice(0, 80)).setStyle(a.status === "active" ? ButtonStyle.Danger : ButtonStyle.Success));
           for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
           await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+          if (validationError) {
+            await interaction.followUp({ ephemeral: true, content: `SMTP account enable failed: ${validationError}` });
+          }
           return;
         }
       } catch (err) {
@@ -1423,7 +1461,9 @@ export const handleModalSubmit = async (interaction: ModalSubmitInteraction): Pr
         maxPerWindow: 50,
         maxConcurrent: 1
       });
-      await interaction.editReply(`created smtp account ${createdId}. Use SMTP List to verify it.`);
+      const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+      const validation = await validateAndUpdateAccountStatus(repo, createdId);
+      await interaction.editReply(`created smtp account ${createdId}. status=${validation.ok ? "active" : "failed"}${validation.error ? ` error=${validation.error}` : ""}`);
       return;
     }
 
@@ -1780,7 +1820,8 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
     const username = options.getString("username", true);
     const password = options.getString("password", true);
     const port = options.getInteger("port") ?? 587;
-    const useTls = options.getBoolean("use_tls") ?? port === 465;
+    const rawUseTls = options.getBoolean("use_tls");
+    const useTls = typeof rawUseTls === "boolean" ? rawUseTls : port === 465 || port === 587;
     const maxPerWindow = options.getInteger("max_per_window") ?? 50;
     const maxConcurrent = options.getInteger("max_concurrent") ?? 1;
 
@@ -1795,7 +1836,9 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
       maxPerWindow,
       maxConcurrent
     });
-    await commandInteraction.editReply(`created smtp account ${id}`);
+    const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+    const validation = await validateAndUpdateAccountStatus(repo, id);
+    await commandInteraction.editReply(`created smtp account ${id}. status=${validation.ok ? "active" : "failed"}${validation.error ? ` error=${validation.error}` : ""}`);
     return;
   }
 
@@ -1872,6 +1915,13 @@ export const handleChatInputCommand = async (commandInteraction: ChatInputComman
     }
     const repo = new SmtpRepository();
     await repo.updateSmtpAccount(id, patch as any);
+    const shouldValidate = ["host", "port", "username", "passwordEncrypted", "useTls", "status"].some((key) => key in patch);
+    if (shouldValidate && patch.status !== "disabled") {
+      const { validateAndUpdateAccountStatus } = await import("../smtp/validator.js");
+      const validation = await validateAndUpdateAccountStatus(repo, id);
+      await commandInteraction.editReply(`updated smtp account ${id}. status=${validation.ok ? "active" : "failed"}${validation.error ? ` error=${validation.error}` : ""}`);
+      return;
+    }
     await commandInteraction.editReply(`updated smtp account ${id}`);
     return;
   }
