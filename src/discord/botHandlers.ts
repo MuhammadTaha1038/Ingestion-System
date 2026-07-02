@@ -291,8 +291,8 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     }
 
     try {
-      const collected = await interaction.channel.awaitMessages({
-        filter: (m) => m.author.id === interaction.user.id && m.attachments.size > 0,
+      const collected = await (interaction.channel as any).awaitMessages({
+        filter: (m: any) => m.author.id === interaction.user.id && m.attachments.size > 0,
         max: 1,
         time: 120000,
         errors: ["time"]
