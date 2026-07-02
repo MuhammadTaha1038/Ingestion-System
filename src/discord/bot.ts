@@ -13,8 +13,7 @@ export const startDiscordBot = async (): Promise<void> => {
         logger.warn("DISCORD_BOT_TOKEN not set; skipping Discord bot");
         return;
     }
-
-    const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
+    const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages], partials: [Partials.Channel] });
 
     client.on("ready", () => {
         logger.info("discord bot ready", { user: client.user?.tag });

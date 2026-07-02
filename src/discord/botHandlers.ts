@@ -273,6 +273,64 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     await interaction.editReply(message);
     return;
   }
+
+  if (
+    interaction.customId === dashboardButtonIds.ingestAttachment ||
+    interaction.customId === dashboardButtonIds.smtpImportAttachment
+  ) {
+    await interaction.reply({
+      content: "Please drag and drop your `.csv` or `.txt` file into this channel now. You have 2 minutes to upload the file.",
+      ephemeral: true
+    });
+
+    const isSmtp = interaction.customId === dashboardButtonIds.smtpImportAttachment;
+
+    if (!interaction.channel) {
+      await interaction.followUp({ content: "Cannot listen for files in this channel type.", ephemeral: true });
+      return;
+    }
+
+    try {
+      const collected = await interaction.channel.awaitMessages({
+        filter: (m) => m.author.id === interaction.user.id && m.attachments.size > 0,
+        max: 1,
+        time: 120000,
+        errors: ["time"]
+      });
+
+      const message = collected.first();
+      if (!message) return;
+
+      const attachment = message.attachments.first();
+      if (!attachment) return;
+
+      await interaction.followUp({ content: "File received! Starting processing...", ephemeral: true });
+
+      if (isSmtp) {
+        if (!config.databaseUrl) {
+          await interaction.followUp({ content: "db_required", ephemeral: true });
+          return;
+        }
+        const response = await fetch(attachment.url);
+        if (!response.ok) {
+          await interaction.followUp({ content: "failed_to_fetch_attachment", ephemeral: true });
+          return;
+        }
+        const text = await response.text();
+        const { ingestParsedAccounts } = await import("../smtp/bulkIngest.js");
+        const results = await ingestParsedAccounts({ content: text });
+        const success = results.filter((r: any) => r.id).length;
+        const failed = results.filter((r: any) => r.error).length;
+        await interaction.followUp({ content: `Imported: ${success}, Failed: ${failed}`, ephemeral: true });
+      } else {
+        const msg = await queueDashboardIngestion({ sourcePath: attachment.url });
+        await interaction.followUp({ content: truncate(msg), ephemeral: true });
+      }
+    } catch (err) {
+      await interaction.followUp({ content: "Upload timed out. Please click the button to try again.", ephemeral: true });
+    }
+    return;
+  }
   if (interaction.customId === dashboardButtonIds.ingest) {
     await interaction.showModal(createIngestModal());
     return;

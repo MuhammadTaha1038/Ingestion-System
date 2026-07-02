@@ -28,6 +28,9 @@ export const sendDirect = async (
     }
   });
 
+  const pino = (await import("../logging/logger.js")).createLogger("info");
+  pino.info("DEBUG SMTP DIRECT AUTH", { user: cfg.username, passLength: cfg.password?.length, passFalsy: !cfg.password });
+
   const info = await transporter.sendMail({
     from: cfg.username ?? "no-reply@example.com",
     replyTo: cfg.replyTo ?? undefined,

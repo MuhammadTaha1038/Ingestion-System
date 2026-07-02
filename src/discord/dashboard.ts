@@ -26,6 +26,7 @@ export const emailCreateModalId = "dashboard:email-create-modal";
 
 export const dashboardButtonIds = {
   ingest: "dashboard:ingest",
+  ingestAttachment: "dashboard:ingest-attachment",
   ingestNewList: "dashboard:ingest-new-list",
   queue: "dashboard:queue",
   logs: "dashboard:logs",
@@ -54,6 +55,8 @@ export const dashboardButtonIds = {
   smtpDelete: "dashboard:smtp-delete",
   smtpDeletePick: "dashboard:smtp-delete-pick",
   smtpImport: "dashboard:smtp-import",
+  smtpImportAttachment: "dashboard:smtp-import-attachment",
+  smtpAccountsStatus: "dashboard:smtp-accounts-status",
   storage: "dashboard:storage",
   pause: "dashboard:pause",
   resume: "dashboard:resume",
@@ -148,8 +151,7 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
 export const createDashboardComponents = () => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.ingest).setLabel("Ingest Data").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.ingestNewList).setLabel("Ingest New Recipient List").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.datasetList).setLabel("View Datasets").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.ingestAttachment).setLabel("Upload Dataset File").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(dashboardButtonIds.datasetSelect).setLabel("Select Dataset").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.status).setLabel("Status").setStyle(ButtonStyle.Secondary)
   ),
@@ -172,7 +174,8 @@ export const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("SMTP Import").setStyle(ButtonStyle.Success)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImportAttachment).setLabel("Upload SMTP File").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("Import SMTP (Text)").setStyle(ButtonStyle.Secondary)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),

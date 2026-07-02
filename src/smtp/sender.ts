@@ -30,6 +30,8 @@ export const sendMail = async (
   }
 
   const transporter = nodemailer.createTransport(buildTransportOptions(validation.config, row.username, password));
+  const pino = (await import("../logging/logger.js")).createLogger("info");
+  pino.info("DEBUG SMTP SENDER AUTH", { user: row.username, passLength: password?.length, passFalsy: !password });
 
   const info = await transporter.sendMail({
     from: row.username,
