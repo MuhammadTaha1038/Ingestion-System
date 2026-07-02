@@ -174,8 +174,7 @@ export const createDashboardComponents = () => [
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImportAttachment).setLabel("Upload SMTP File").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImport).setLabel("Import SMTP (Text)").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImportAttachment).setLabel("Upload SMTP File").setStyle(ButtonStyle.Success)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.queue).setLabel("Queue").setStyle(ButtonStyle.Secondary),
