@@ -20,10 +20,10 @@ export const registerCommands = async (): Promise<void> => {
   const commands = [
     { name: "dashboard", description: "Open the Discord operations dashboard" },
     { name: "ingest", description: "Trigger ingestion", options: [
+      { name: "file", type: 11, description: "Dataset file attachment", required: false },
       { name: "format", type: 3, description: "auto, csv, json, txt, raw, bulk", required: false },
       { name: "content", type: 3, description: "dataset content", required: false },
       { name: "source_path", type: 3, description: "optional source path", required: false },
-      { name: "file", type: 11, description: "optional attachment URL source", required: false },
       { name: "campaign_id", type: 3, description: "optional campaign id", required: false }
     ] },
     { name: "health", description: "Show service health" },
@@ -65,9 +65,9 @@ export const registerCommands = async (): Promise<void> => {
     ] },
     { name: "smtp-status", description: "Show active SMTP accounts" },
     { name: "smtp-import", description: "Bulk import SMTP accounts from pasted content, attached TXT file, or source URL", options: [
+      { name: "file", type: 11, description: "Attached TXT/CSV file containing SMTP accounts", required: false },
       { name: "content", type: 3, description: "Text content of SMTP accounts (CSV or lines)", required: false },
       { name: "source_path", type: 3, description: "Source URL or S3 path to the TXT file", required: false },
-      { name: "file", type: 11, description: "Optional attachment containing SMTP TXT data", required: false },
       { name: "email_account_id", type: 3, description: "Default email account id to attach", required: false }
     ] },
     { name: "accounts-status", description: "Show account status" },
