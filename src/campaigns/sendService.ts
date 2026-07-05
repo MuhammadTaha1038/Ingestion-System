@@ -145,6 +145,13 @@ export const sendSingleRecipientWithCampaign = async (args: {
     recipients: 1
   }, sendJobId);
 
+      const baseUrl = process.env.PUBLIC_URL || "http://86.48.0.69:3000";
+      const unsubscribeUrl = `${baseUrl}/unsubscribe?email=${encodeURIComponent(args.recipientEmail)}`;
+      const footerHtml = `<br><br><hr><div style="font-size:12px;color:#666;text-align:center;">
+        <p>This email was sent to ${args.recipientEmail}. If you no longer wish to receive these emails, you may <a href="${unsubscribeUrl}">unsubscribe here</a>.</p>
+        <p>Sender Address: 123 Business Rd, Suite 100, City, Country</p>
+      </div>`;
+
   await sendingQueue.add(
     "send",
     {
@@ -155,8 +162,8 @@ export const sendSingleRecipientWithCampaign = async (args: {
         {
           to: args.recipientEmail,
           subject: campaign.subject,
-          html: campaign.body_html,
-          text: campaign.body_text ?? undefined
+          html: campaign.body_html + footerHtml,
+          text: campaign.body_text ? campaign.body_text + `\n\nUnsubscribe: ${unsubscribeUrl}` : undefined
         }
       ],
       smtpAccountId: campaign.smtp_account_id ?? undefined
