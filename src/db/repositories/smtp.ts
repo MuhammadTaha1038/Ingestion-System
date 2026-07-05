@@ -11,6 +11,7 @@ export interface SmtpAccountRecord {
   status: string;
   max_per_window: number;
   max_concurrent: number;
+  created_at: Date;
 }
 
 export interface SmtpUsageRecord {
@@ -29,7 +30,7 @@ export class SmtpRepository {
 
   async listActiveAccounts(): Promise<SmtpAccountRecord[]> {
     const res = await this.pool.query(
-      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts WHERE status = 'active'`
+      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent, created_at FROM smtp_accounts WHERE status = 'active'`
     );
 
     return res.rows as SmtpAccountRecord[];
@@ -169,7 +170,7 @@ export class SmtpRepository {
 
   async listAllAccounts(): Promise<SmtpAccountRecord[]> {
     const res = await this.pool.query(
-      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent FROM smtp_accounts ORDER BY created_at DESC`
+      `SELECT id, email_account_id, host, port, username, use_tls, status, max_per_window, max_concurrent, created_at FROM smtp_accounts ORDER BY created_at DESC`
     );
 
     return res.rows as SmtpAccountRecord[];

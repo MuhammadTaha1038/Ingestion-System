@@ -23,8 +23,19 @@ const getCurrentSendingWindow = async () => {
   return {
     windowKey: window.windowKey,
     windowStart: window.windowStart,
-    windowEnd: window.windowEnd
+    windowEnd: window.windowEnd,
+    intervalHours: settings.sending_window_interval_hours
   };
+};
+
+const getWarmupDailyLimit = (daysActive: number): number => {
+  if (daysActive <= 3) return 50;
+  if (daysActive <= 7) return 200;
+  if (daysActive <= 10) return 500;
+  if (daysActive <= 14) return 1000;
+  if (daysActive <= 18) return 2000;
+  if (daysActive <= 21) return 4000;
+  return 9000;
 };
 
 export const selectAvailableAccount = async (): Promise<SelectedAccount | null> => {
@@ -36,10 +47,16 @@ export const selectAvailableAccount = async (): Promise<SelectedAccount | null> 
 
   const candidates = [] as Array<{ account: SmtpAccountRecord; used: number }>;
 
+  const windowsPerDay = 24 / windowState.intervalHours;
+
   for (const acc of accounts) {
+    const daysActive = Math.floor((Date.now() - new Date(acc.created_at).getTime()) / 86400000) + 1;
+    const maxDaily = getWarmupDailyLimit(daysActive);
+    const effectiveMaxPerWindow = Math.ceil(maxDaily / windowsPerDay);
+
     const usage = await repo.getUsageForWindow(acc.id, windowId);
     const used = usage ? usage.used_count : 0;
-    if (used < acc.max_per_window) {
+    if (used < effectiveMaxPerWindow) {
       candidates.push({ account: acc, used });
     }
   }

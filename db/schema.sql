@@ -143,3 +143,8 @@ CREATE TABLE smtp_failures (
   last_failure_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE unsubscribes (
+  email_normalized text PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

@@ -11,6 +11,7 @@ import { getQueueStatus, pauseQueues, resumeQueues } from "../../queue/status.js
 import { jobStore } from "../../jobs/store.js";
 import { getDatabasePool } from "../../db/pool.js";
 import { sendDatasetWithCampaign } from "../../campaigns/sendService.js";
+import { registerUnsubscribeRoutes } from "./unsubscribe.js";
 
 const notReady = (feature: string) => ({
   status: "not_ready",
@@ -66,6 +67,7 @@ const parseIngestBody = (body: unknown) => {
 
 export const registerRoutes = (server: FastifyInstance): void => {
   server.get("/health", async () => ({ status: "ok" }));
+  registerUnsubscribeRoutes(server);
 
   server.post("/ingest", async (request, reply) => {
     const parsed = parseIngestBody(request.body);

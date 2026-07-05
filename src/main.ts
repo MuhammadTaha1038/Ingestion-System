@@ -10,6 +10,17 @@ async function main(): Promise<void> {
 
   logger.info("bootstrap started", { env: config.env });
 
+  if (config.databaseUrl) {
+    const { getDatabasePool } = await import("./db/pool.js");
+    const pool = getDatabasePool();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS unsubscribes (
+        email_normalized text PRIMARY KEY,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+  }
+
   const server = createServer(logger);
   await server.listen({ port: config.port, host: "0.0.0.0" });
   logger.info("api listening", { port: config.port });

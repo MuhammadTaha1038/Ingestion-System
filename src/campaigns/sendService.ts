@@ -57,7 +57,10 @@ export const enqueueCampaignSendForDataset = async (args: {
 }): Promise<{ queued: number; campaignId: string; recipients: number }> => {
   const database = getPool(args.pool);
   const res = await database.query(
-    `SELECT email_normalized FROM dataset_recipients WHERE dataset_id = $1 ORDER BY email_normalized ASC`,
+    `SELECT dr.email_normalized FROM dataset_recipients dr
+     LEFT JOIN unsubscribes u ON dr.email_normalized = u.email_normalized
+     WHERE dr.dataset_id = $1 AND u.email_normalized IS NULL
+     ORDER BY dr.email_normalized ASC`,
     [args.datasetId]
   );
 
@@ -67,12 +70,21 @@ export const enqueueCampaignSendForDataset = async (args: {
 
   for (let i = 0; i < emails.length; i += batchSize) {
     const sendJobId = randomUUID();
-    const batch = emails.slice(i, i + batchSize).map((email: string) => ({
-      to: email,
-      subject: args.campaign.subject,
-      html: args.campaign.body_html,
-      text: args.campaign.body_text ?? undefined
-    }));
+    const batch = emails.slice(i, i + batchSize).map((email: string) => {
+      const baseUrl = process.env.PUBLIC_URL || "http://86.48.0.69:3000";
+      const unsubscribeUrl = `${baseUrl}/unsubscribe?email=${encodeURIComponent(email)}`;
+      const footerHtml = `<br><br><hr><div style="font-size:12px;color:#666;text-align:center;">
+        <p>This email was sent to ${email}. If you no longer wish to receive these emails, you may <a href="${unsubscribeUrl}">unsubscribe here</a>.</p>
+        <p>Sender Address: 123 Business Rd, Suite 100, City, Country</p>
+      </div>`;
+      
+      return {
+        to: email,
+        subject: args.campaign.subject,
+        html: args.campaign.body_html + footerHtml,
+        text: args.campaign.body_text ? args.campaign.body_text + `\n\nUnsubscribe: ${unsubscribeUrl}` : undefined
+      };
+    });
 
     await jobRepo.createJob({
       id: sendJobId,
