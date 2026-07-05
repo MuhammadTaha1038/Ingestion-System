@@ -130,6 +130,12 @@ export const sendSingleRecipientWithCampaign = async (args: {
     return null;
   }
 
+  const database = getPool(args.pool);
+  const unsubCheck = await database.query(`SELECT email_normalized FROM unsubscribes WHERE email_normalized = $1`, [args.recipientEmail.toLowerCase().trim()]);
+  if (unsubCheck.rows.length > 0) {
+    return { queued: 0, campaignId: campaign.id, recipients: 0 };
+  }
+
   const sendJobId = randomUUID();
   const jobRepo = new JobRepository(getPool(args.pool));
   await jobRepo.createJob({
