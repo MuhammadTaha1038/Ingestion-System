@@ -116,19 +116,31 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
     const queue = await getQueueStatus();
     let emailsSent = queue.sending.completed;
     let emailsRemaining = queue.sending.waiting + queue.sending.active + queue.sending.delayed;
+    
+    let datasetName = "None";
+    let campaignName = "None";
 
-    if (emailsSent === 0 && emailsRemaining === 0) {
-      try {
-        const pool = getDatabasePool();
-        const latestJobRes = await pool.query(
-          `SELECT campaign_id FROM jobs WHERE type = 'sending' AND campaign_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`
-        );
-        if (latestJobRes.rows.length > 0) {
-          const campaignId = latestJobRes.rows[0].campaign_id;
+    try {
+      const pool = getDatabasePool();
+      const latestJobRes = await pool.query(
+        `SELECT j.campaign_id, c.name as campaign_name, d.source_name as dataset_name
+         FROM jobs j
+         LEFT JOIN campaigns c ON j.campaign_id = c.id
+         LEFT JOIN datasets d ON j.dataset_id = d.id
+         WHERE j.type = 'sending' AND j.campaign_id IS NOT NULL 
+         ORDER BY j.created_at DESC LIMIT 1`
+      );
+      
+      if (latestJobRes.rows.length > 0) {
+        const latestRow = latestJobRes.rows[0];
+        campaignName = latestRow.campaign_name || latestRow.campaign_id || "Unknown";
+        datasetName = latestRow.dataset_name || "Manual test / Multi-dataset";
+
+        if (emailsSent === 0 && emailsRemaining === 0) {
           const statsRes = await pool.query(
             `SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
              FROM jobs WHERE type = 'sending' AND campaign_id = $1`,
-            [campaignId]
+            [latestRow.campaign_id]
           );
           if (statsRes.rows.length > 0) {
             const row = statsRes.rows[0];
@@ -136,9 +148,9 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
             emailsRemaining = Math.max(0, row.total - row.processed);
           }
         }
-      } catch (err) {
-        logger.error("Failed to fetch persistent campaign stats", { error: String(err) });
       }
+    } catch (err) {
+      logger.error("Failed to fetch persistent campaign stats", { error: String(err) });
     }
 
     const content = [
@@ -147,6 +159,8 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
       "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here.",
       "",
       "📊 **Live Campaign Progress**",
+      `* **Campaign:** ${campaignName}`,
+      `* **Dataset:** ${datasetName}`,
       `* **Emails sent:** ${emailsSent}`,
       `* **Emails remaining:** ${emailsRemaining}`
     ].join("\n");
