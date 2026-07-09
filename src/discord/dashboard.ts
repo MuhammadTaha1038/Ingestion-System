@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, ModalBuilder, Tex
 import { createLogger } from "../logging/logger.js";
 import { loadConfig } from "../config/config.js";
 import { HierarchyRepository } from "../db/repositories/hierarchy.js";
+import { getQueueStatus } from "../queue/status.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -111,10 +112,18 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
       return;
     }
 
+    const queue = await getQueueStatus();
+    const emailsSent = queue.sending.completed;
+    const emailsRemaining = queue.sending.waiting + queue.sending.active + queue.sending.delayed;
+
     const content = [
-      "Discord operations dashboard",
+      "**Discord operations dashboard**",
       "Use these buttons for the primary operational interface.",
-      "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here."
+      "Ingestion, queue, status, logs, accounts, campaigns, cPanel, subdomains, emails, storage, pause, and resume are exposed here.",
+      "",
+      "📊 **Live Campaign Progress**",
+      `* **Emails sent:** ${emailsSent}`,
+      `* **Emails remaining:** ${emailsRemaining}`
     ].join("\n");
 
     const components = createDashboardComponents();

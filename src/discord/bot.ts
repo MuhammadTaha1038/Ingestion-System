@@ -18,6 +18,9 @@ export const startDiscordBot = async (): Promise<void> => {
     client.on("ready", () => {
         logger.info("discord bot ready", { user: client.user?.tag });
         void postDashboardPanel(client);
+        setInterval(() => {
+            void postDashboardPanel(client).catch(err => logger.error("failed to update dashboard interval", { error: String(err) }));
+        }, 30000);
     });
 
     client.on("interactionCreate", async (interaction) => {
