@@ -123,7 +123,7 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
     try {
       const pool = getDatabasePool();
       const latestJobRes = await pool.query(
-        `SELECT j.campaign_id, c.name as campaign_name, d.source_name as dataset_name
+        `SELECT j.campaign_id, j.dataset_id, c.name as campaign_name, d.source_name as dataset_name
          FROM jobs j
          LEFT JOIN campaigns c ON j.campaign_id = c.id
          LEFT JOIN datasets d ON j.dataset_id = d.id
@@ -139,8 +139,8 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
         if (emailsSent === 0 && emailsRemaining === 0) {
           const statsRes = await pool.query(
             `SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
-             FROM jobs WHERE type = 'sending' AND campaign_id = $1`,
-            [latestRow.campaign_id]
+             FROM jobs WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))`,
+            [latestRow.campaign_id, latestRow.dataset_id]
           );
           if (statsRes.rows.length > 0) {
             const row = statsRes.rows[0];
