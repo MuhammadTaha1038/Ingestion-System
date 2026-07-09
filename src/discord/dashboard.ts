@@ -113,9 +113,8 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
       return;
     }
 
-    const queue = await getQueueStatus();
-    let emailsSent = queue.sending.completed;
-    let emailsRemaining = queue.sending.waiting + queue.sending.active + queue.sending.delayed;
+    let emailsSent = 0;
+    let emailsRemaining = 0;
     
     let datasetName = "None";
     let campaignName = "None";
@@ -136,24 +135,22 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
         campaignName = latestRow.campaign_name || latestRow.campaign_id || "Unknown";
         datasetName = latestRow.dataset_name || "Manual test / Multi-dataset";
 
-        if (emailsSent === 0 && emailsRemaining === 0) {
-          const statsRes = await pool.query(
-            `WITH latest_job AS (
-               SELECT created_at FROM jobs 
-               WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))
-               ORDER BY created_at DESC LIMIT 1
-             )
-             SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
-             FROM jobs 
+        const statsRes = await pool.query(
+          `WITH latest_job AS (
+             SELECT created_at FROM jobs 
              WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))
-               AND created_at >= (SELECT created_at - interval '1 minute' FROM latest_job)`,
-            [latestRow.campaign_id, latestRow.dataset_id]
-          );
-          if (statsRes.rows.length > 0) {
-            const row = statsRes.rows[0];
-            emailsSent = row.processed;
-            emailsRemaining = Math.max(0, row.total - row.processed);
-          }
+             ORDER BY created_at DESC LIMIT 1
+           )
+           SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
+           FROM jobs 
+           WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))
+             AND created_at >= (SELECT created_at - interval '1 minute' FROM latest_job)`,
+          [latestRow.campaign_id, latestRow.dataset_id]
+        );
+        if (statsRes.rows.length > 0) {
+          const row = statsRes.rows[0];
+          emailsSent = row.processed;
+          emailsRemaining = Math.max(0, row.total - row.processed);
         }
       }
     } catch (err) {
