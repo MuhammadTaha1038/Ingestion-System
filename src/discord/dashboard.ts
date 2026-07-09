@@ -3,6 +3,7 @@ import { createLogger } from "../logging/logger.js";
 import { loadConfig } from "../config/config.js";
 import { HierarchyRepository } from "../db/repositories/hierarchy.js";
 import { getQueueStatus } from "../queue/status.js";
+import { getDatabasePool } from "../db/pool.js";
 
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
@@ -113,8 +114,32 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
     }
 
     const queue = await getQueueStatus();
-    const emailsSent = queue.sending.completed;
-    const emailsRemaining = queue.sending.waiting + queue.sending.active + queue.sending.delayed;
+    let emailsSent = queue.sending.completed;
+    let emailsRemaining = queue.sending.waiting + queue.sending.active + queue.sending.delayed;
+
+    if (emailsSent === 0 && emailsRemaining === 0) {
+      try {
+        const pool = getDatabasePool();
+        const latestJobRes = await pool.query(
+          `SELECT campaign_id FROM jobs WHERE type = 'sending' AND campaign_id IS NOT NULL ORDER BY created_at DESC LIMIT 1`
+        );
+        if (latestJobRes.rows.length > 0) {
+          const campaignId = latestJobRes.rows[0].campaign_id;
+          const statsRes = await pool.query(
+            `SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
+             FROM jobs WHERE type = 'sending' AND campaign_id = $1`,
+            [campaignId]
+          );
+          if (statsRes.rows.length > 0) {
+            const row = statsRes.rows[0];
+            emailsSent = row.processed;
+            emailsRemaining = Math.max(0, row.total - row.processed);
+          }
+        }
+      } catch (err) {
+        logger.error("Failed to fetch persistent campaign stats", { error: String(err) });
+      }
+    }
 
     const content = [
       "**Discord operations dashboard**",
