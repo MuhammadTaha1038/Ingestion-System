@@ -138,8 +138,15 @@ export const postDashboardPanel = async (client: Client): Promise<void> => {
 
         if (emailsSent === 0 && emailsRemaining === 0) {
           const statsRes = await pool.query(
-            `SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
-             FROM jobs WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))`,
+            `WITH latest_job AS (
+               SELECT created_at FROM jobs 
+               WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))
+               ORDER BY created_at DESC LIMIT 1
+             )
+             SELECT COALESCE(SUM(total_count), 0)::int AS total, COALESCE(SUM(processed_count), 0)::int AS processed 
+             FROM jobs 
+             WHERE type = 'sending' AND campaign_id = $1 AND (dataset_id = $2 OR ($2 IS NULL AND dataset_id IS NULL))
+               AND created_at >= (SELECT created_at - interval '1 minute' FROM latest_job)`,
             [latestRow.campaign_id, latestRow.dataset_id]
           );
           if (statsRes.rows.length > 0) {
