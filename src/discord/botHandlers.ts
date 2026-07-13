@@ -220,12 +220,14 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       }
 
       let page = 0;
-      if (interaction.message?.components) {
-        const lastRow = interaction.message.components[interaction.message.components.length - 1];
-        const indicator = lastRow.components.find((c: any) => c.customId === "disabled_page_indicator");
-        if (indicator && 'label' in indicator && indicator.label) {
-          const match = String(indicator.label).match(/Page (\d+) of/);
-          if (match) page = parseInt(match[1], 10) - 1;
+      if (interaction.message?.components && interaction.message.components.length > 0) {
+        const lastRow = interaction.message.components[interaction.message.components.length - 1] as any;
+        if (lastRow.components) {
+          const indicator = lastRow.components.find((c: any) => c.customId === "disabled_page_indicator");
+          if (indicator && 'label' in indicator && indicator.label) {
+            const match = String(indicator.label).match(/Page (\d+) of/);
+            if (match) page = parseInt(match[1], 10) - 1;
+          }
         }
       }
 
