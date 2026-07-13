@@ -754,7 +754,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       }
 
       const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = list.map((acc) => {
+      const buttons = list.slice(0, 25).map((acc) => {
         const action = acc.status === "active" ? "disable" : "enable";
         const label = `${action === "disable" ? "Disable" : "Enable"} ${acc.username}@${acc.host}`;
         const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
