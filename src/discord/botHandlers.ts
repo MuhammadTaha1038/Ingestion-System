@@ -15,8 +15,10 @@ import { getQueueStatus, pauseQueues, resumeQueues } from "../queue/status.js";
 import { autoSendLatestCompletedDataset, selectCampaignById, sendSingleRecipientWithCampaign } from "../campaigns/sendService.js";
 import { encrypt } from "../security/crypto.js";
 import {
+  campaignViewModalId,
   dashboardButtonIds,
   createDashboardComponents,
+  createPaginationRow,
   createIngestModal,
   createDatasetSelectModal,
   createCampaignDetailsModal,
@@ -489,7 +491,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
-  if (interaction.customId === dashboardButtonIds.datasetSelect) {
+  if (interaction.customId.startsWith(dashboardButtonIds.datasetSelect)) {
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
       await interaction.editReply("db_required");
@@ -503,19 +505,31 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
 
+    const pageStr = interaction.customId.split(":page:")[1];
+    const page = pageStr ? parseInt(pageStr, 10) : 0;
+
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = list.slice(0, 25).map((row) =>
+    const itemsPerPage = 20;
+    const start = page * itemsPerPage;
+    const pagedList = list.slice(start, start + itemsPerPage);
+
+    const buttons = pagedList.map((row) =>
       new ButtonBuilder().setCustomId(createShortCustomId("dashboard:dataset-pick", String(row.id))).setLabel((row.source_name ?? String(row.id)).slice(0, 80)).setStyle(ButtonStyle.Secondary)
     );
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
 
+    const paginationRow = createPaginationRow(dashboardButtonIds.datasetSelect, page, list.length, itemsPerPage);
+    if (paginationRow) {
+      rows.push(paginationRow);
+    }
+
     await interaction.editReply({ content: "Select a dataset:", components: rows });
     return;
   }
 
-  if (interaction.customId === dashboardButtonIds.campaignSelect || interaction.customId === dashboardButtonIds.campaignView) {
+  if (interaction.customId.startsWith(dashboardButtonIds.campaignSelect) || interaction.customId.startsWith(dashboardButtonIds.campaignView)) {
     // Both campaignSelect and campaignView now use the same button-picker flow — no manual ID entry needed.
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
@@ -524,17 +538,30 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     }
 
     const pool = getDatabasePool();
-    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC`);
     if (!res.rows || res.rows.length === 0) {
       await interaction.editReply("No campaigns found.");
       return;
     }
 
+    const pageStr = interaction.customId.split(":page:")[1];
+    const page = pageStr ? parseInt(pageStr, 10) : 0;
+    const itemsPerPage = 20;
+    const start = page * itemsPerPage;
+    const pagedList = res.rows.slice(start, start + itemsPerPage);
+
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Secondary));
+    const buttons = pagedList.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Secondary));
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
+
+    const baseCustomId = interaction.customId.includes(dashboardButtonIds.campaignView) ? dashboardButtonIds.campaignView : dashboardButtonIds.campaignSelect;
+    const paginationRow = createPaginationRow(baseCustomId, page, res.rows.length, itemsPerPage);
+    if (paginationRow) {
+      rows.push(paginationRow);
+    }
+
     await interaction.editReply({ content: "Select a campaign:", components: rows });
     return;
   }
@@ -601,7 +628,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
-  if (interaction.customId === dashboardButtonIds.runCampaign) {
+  if (interaction.customId.startsWith(dashboardButtonIds.runCampaign)) {
     // Step 1: Show campaign picker — user picks campaign, then dataset picker appears
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
@@ -609,16 +636,29 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       return;
     }
     const pool = getDatabasePool();
-    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC LIMIT 25`);
+    const res = await pool.query(`SELECT id, name FROM campaigns ORDER BY created_at DESC`);
     if (!res.rows || res.rows.length === 0) {
       await interaction.editReply("No campaigns found. Create a campaign first.");
       return;
     }
+
+    const pageStr = interaction.customId.split(":page:")[1];
+    const page = pageStr ? parseInt(pageStr, 10) : 0;
+    const itemsPerPage = 20;
+    const start = page * itemsPerPage;
+    const pagedList = res.rows.slice(start, start + itemsPerPage);
+
     const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-    const buttons = res.rows.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:run-campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger));
+    const buttons = pagedList.map((r: any) => new ButtonBuilder().setCustomId(createShortCustomId("dashboard:run-campaign-pick", String(r.id))).setLabel(String(r.name || r.id).slice(0, 80)).setStyle(ButtonStyle.Danger));
     for (let i = 0; i < buttons.length; i += 5) {
       rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons.slice(i, i + 5)));
     }
+
+    const paginationRow = createPaginationRow(dashboardButtonIds.runCampaign, page, res.rows.length, itemsPerPage);
+    if (paginationRow) {
+      rows.push(paginationRow);
+    }
+
     await interaction.editReply({ content: "Select a campaign to run:", components: rows });
     return;
   }
@@ -739,13 +779,16 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
-  if (interaction.customId === dashboardButtonIds.smtpList || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
+  if (interaction.customId.startsWith(dashboardButtonIds.smtpList) || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
     if (!config.databaseUrl) {
       await interaction.editReply("db_required");
       return;
     }
 
-    if (interaction.customId === dashboardButtonIds.smtpList) {
+    if (interaction.customId.startsWith(dashboardButtonIds.smtpList)) {
+      const pageStr = interaction.customId.split(":page:")[1];
+      const page = pageStr ? parseInt(pageStr, 10) : 0;
+
       const repo = new SmtpRepository();
       const list = await repo.listAllAccounts();
       if (!list || list.length === 0) {
@@ -754,7 +797,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       }
 
       const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = list.slice(0, 25).map((acc) => {
+      const itemsPerPage = 20;
+      const start = page * itemsPerPage;
+      const pagedList = list.slice(start, start + itemsPerPage);
+
+      const buttons = pagedList.map((acc) => {
         const action = acc.status === "active" ? "disable" : "enable";
         const label = `${action === "disable" ? "Disable" : "Enable"} ${acc.username}@${acc.host}`;
         const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
@@ -766,6 +813,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
       for (let i = 0; i < buttons.length; i += 5) {
         rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+      }
+
+      const paginationRow = createPaginationRow(dashboardButtonIds.smtpList, page, list.length, itemsPerPage);
+      if (paginationRow) {
+        rows.push(paginationRow);
       }
 
       await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });

@@ -237,6 +237,46 @@ export const createDashboardComponents = () => [
   )
 ];
 
+export const createPaginationRow = (
+  baseCustomId: string,
+  currentPage: number,
+  totalItems: number,
+  itemsPerPage: number = 20
+): ActionRowBuilder<ButtonBuilder> | null => {
+  if (totalItems <= itemsPerPage) return null;
+
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+  if (currentPage > 0) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${baseCustomId}:page:${currentPage - 1}`)
+        .setLabel("⬅️ Previous")
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+
+  if (currentPage < totalPages - 1) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${baseCustomId}:page:${currentPage + 1}`)
+        .setLabel("Next ➡️")
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId("disabled_page_indicator")
+      .setLabel(`Page ${currentPage + 1} of ${totalPages}`)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true)
+  );
+
+  return row;
+};
+
 export const createIngestModal = () => {
   const sourcePath = new TextInputBuilder()
     .setCustomId("source_path")
