@@ -219,9 +219,23 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
         }
       }
 
+      let page = 0;
+      if (interaction.message?.components) {
+        const lastRow = interaction.message.components[interaction.message.components.length - 1];
+        const indicator = lastRow.components.find((c: any) => c.customId === "disabled_page_indicator");
+        if (indicator && 'label' in indicator && indicator.label) {
+          const match = String(indicator.label).match(/Page (\d+) of/);
+          if (match) page = parseInt(match[1], 10) - 1;
+        }
+      }
+
       const list = await repo.listAllAccounts();
+      const itemsPerPage = 20;
+      const start = page * itemsPerPage;
+      const pagedList = list.slice(start, start + itemsPerPage);
+
       const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
-      const buttons = list.map((a) => {
+      const buttons = pagedList.map((a) => {
         const action = a.status === "active" ? "disable" : "enable";
         const label = `${action === "disable" ? "Disable" : "Enable"} ${a.username}@${a.host}`;
         const style = action === "disable" ? ButtonStyle.Danger : ButtonStyle.Success;
@@ -231,6 +245,11 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
           .setStyle(style);
       });
       for (let i = 0; i < buttons.length; i += 5) rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(...(buttons.slice(i, i + 5) as ButtonBuilder[])));
+
+      const paginationRow = createPaginationRow(dashboardButtonIds.smtpList, page, list.length, itemsPerPage);
+      if (paginationRow) {
+        rows.push(paginationRow);
+      }
 
       await interaction.editReply({ content: truncate(formatSmtpRows(list)), components: rows });
 
