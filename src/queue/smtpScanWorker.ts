@@ -71,6 +71,10 @@ export const createSmtpScanWorker = () => {
           }
         }
 
+        if (report.length > 1900) {
+          report = report.slice(0, 1900) + "\n\n*(Report truncated due to Discord length limits)*";
+        }
+
         await sendDiscordReport(job.data.channelId, report);
       } catch (err) {
         logger.error("smtpScanWorker: failed to scan", { error: String(err) });
