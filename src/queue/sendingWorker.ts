@@ -61,8 +61,8 @@ export const startSendingWorker = (): void => {
         }
 
         if (!selected) {
-          logger.warn("no available smtp account, requeueing work");
-          throw new Error("no_smtp_available");
+          logger.warn("no available smtp account, throwing capacity reached to delay job");
+          throw new Error("smtp_capacity_reached");
         }
         logger.info("sending recipient", { jobId: job.id, to: recipient?.to, smtpAccount: selected.account.id, attemptLimit: maxAttempts });
         // retry loop per recipient
@@ -115,6 +115,11 @@ export const startSendingWorker = (): void => {
         } else {
           // on success, reset failure counter for account
           if (smtpRepo) await smtpRepo.resetFailureCount(selected.account.id);
+          // remove this recipient from job.data so it isn't resent if the job is retried later
+          if (job.data && Array.isArray(job.data.recipients)) {
+            job.data.recipients = job.data.recipients.filter((r: any) => r.to !== recipient.to);
+            await job.updateData(job.data);
+          }
         }
       }
 

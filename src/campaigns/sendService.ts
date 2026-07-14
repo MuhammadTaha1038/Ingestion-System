@@ -110,7 +110,7 @@ export const enqueueCampaignSendForDataset = async (args: {
         recipients: batch,
         smtpAccountId: (args.campaign as any).smtp_account_id ?? undefined
       },
-      { jobId: sendJobId, removeOnComplete: true }
+      { jobId: sendJobId, removeOnComplete: true, attempts: 48, backoff: { type: "fixed", delay: 3600000 } }
     );
   }
 
@@ -176,7 +176,7 @@ export const sendSingleRecipientWithCampaign = async (args: {
       ],
       smtpAccountId: campaign.smtp_account_id ?? undefined
     },
-    { jobId: sendJobId, removeOnComplete: true }
+    { jobId: sendJobId, removeOnComplete: true, attempts: 48, backoff: { type: "fixed", delay: 3600000 } }
   );
 
   return {
