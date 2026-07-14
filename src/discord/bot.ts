@@ -7,6 +7,10 @@ import { postDashboardPanel } from "./dashboard.js";
 const config = loadConfig();
 const logger = createLogger(config.logLevel);
 
+let discordClient: Client | null = null;
+export const getDiscordClient = () => discordClient;
+
+
 export const startDiscordBot = async (): Promise<void> => {
     const token = process.env.DISCORD_BOT_TOKEN;
     if (!token) {
@@ -14,6 +18,7 @@ export const startDiscordBot = async (): Promise<void> => {
         return;
     }
     const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages], partials: [Partials.Channel] });
+    discordClient = client;
 
     client.on("ready", () => {
         logger.info("discord bot ready", { user: client.user?.tag });

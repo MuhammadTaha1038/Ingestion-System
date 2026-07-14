@@ -2,7 +2,8 @@ import { IngestionInput } from "../ingestion/types.js";
 
 export const QUEUE_NAMES = {
   ingestion: "ingestion",
-  sending: "sending"
+  sending: "sending",
+  smtp_scan: "smtp_scan"
 } as const;
 
 export interface IngestionJobPayload {
@@ -18,4 +19,8 @@ export interface SendingJobPayload {
   replyTo?: string;
   recipients?: Array<{ to: string; subject: string; html?: string; text?: string }>;
   smtpAccountId?: string;
+}
+
+export interface SmtpScanJobPayload {
+  channelId: string;
 }

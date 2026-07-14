@@ -59,6 +59,7 @@ export const dashboardButtonIds = {
   smtpImport: "dashboard:smtp-import",
   smtpImportAttachment: "dashboard:smtp-import-attachment",
   smtpAccountsStatus: "dashboard:smtp-accounts-status",
+  smtpScan: "dashboard:smtp-scan",
   storage: "dashboard:storage",
   pause: "dashboard:pause",
   resume: "dashboard:resume",
@@ -224,8 +225,8 @@ export const createDashboardComponents = () => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(dashboardButtonIds.useTestRecipient).setLabel("Use Test Recipient").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpList).setLabel("SMTP List").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpScan).setLabel("Scan Inactive SMTPs").setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpCreate).setLabel("SMTP Create").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(dashboardButtonIds.smtpDelete).setLabel("SMTP Delete").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(dashboardButtonIds.smtpImportAttachment).setLabel("Upload SMTP File").setStyle(ButtonStyle.Success)
   ),
   new ActionRowBuilder<ButtonBuilder>().addComponents(

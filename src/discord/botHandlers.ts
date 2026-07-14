@@ -800,6 +800,22 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
+  if (interaction.customId === dashboardButtonIds.smtpScan) {
+    if (!config.databaseUrl) {
+      await interaction.editReply("db_required");
+      return;
+    }
+    await interaction.editReply("Scan initiated in the background! I will ping this channel with a full report once it completes.");
+    const { smtpScanQueue } = await import("../queue/queues.js");
+    // Ensure we have a channelId to report back to
+    if (interaction.channelId) {
+      await smtpScanQueue.add("scan", { channelId: interaction.channelId });
+    } else {
+      await interaction.editReply("Failed to determine channel ID for reporting.");
+    }
+    return;
+  }
+
   if (interaction.customId.startsWith(dashboardButtonIds.smtpList) || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
     if (!config.databaseUrl) {
       await interaction.editReply("db_required");

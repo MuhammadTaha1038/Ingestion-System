@@ -39,6 +39,11 @@ async function main(): Promise<void> {
     startWindowResetter();
     logger.info("window resetter started");
   }
+  if (process.env.RUN_SMTP_SCAN_WORKER !== "false") {
+    const { createSmtpScanWorker } = await import("./queue/smtpScanWorker.js");
+    createSmtpScanWorker();
+    logger.info("smtp scan worker started");
+  }
   if (process.env.RUN_SMTP_VALIDATOR !== "false") {
     const { startSmtpValidator } = await import("./smtp/validator.js");
     startSmtpValidator();
