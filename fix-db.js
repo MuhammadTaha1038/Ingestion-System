@@ -1,0 +1,1 @@
+import pg from 'pg'; const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL || 'postgres://postgres:postgres@86.48.0.69:5432/ingestion_system' }); pool.query(\UPDATE jobs SET total_count = 50 WHERE type = 'sending' AND status = 'pending' AND total_count IS NULL\).then(res => { console.log(res.rowCount); process.exit(0); });

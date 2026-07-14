@@ -23,11 +23,12 @@ export class JobRepository {
     status?: JobStatus;
     datasetId?: string | null;
     campaignId?: string | null;
+    totalCount?: number;
   }): Promise<void> {
     const status = params.status ?? "pending";
     await this.pool.query(
-      "INSERT INTO jobs (id, type, status, dataset_id, campaign_id) VALUES ($1, $2, $3, $4, $5)",
-      [params.id, params.type, status, params.datasetId ?? null, params.campaignId ?? null]
+      "INSERT INTO jobs (id, type, status, dataset_id, campaign_id, total_count) VALUES ($1, $2, $3, $4, $5, $6)",
+      [params.id, params.type, status, params.datasetId ?? null, params.campaignId ?? null, params.totalCount ?? null]
     );
   }
 

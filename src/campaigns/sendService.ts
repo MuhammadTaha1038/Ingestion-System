@@ -91,7 +91,8 @@ export const enqueueCampaignSendForDataset = async (args: {
       type: "sending",
       status: "pending",
       campaignId: args.campaign.id,
-      datasetId: args.datasetId
+      datasetId: args.datasetId,
+      totalCount: batch.length
     });
 
     jobStore.createJob("sending", {
@@ -143,7 +144,8 @@ export const sendSingleRecipientWithCampaign = async (args: {
     type: "sending",
     status: "pending",
     datasetId: null,
-    campaignId: campaign.id
+    campaignId: campaign.id,
+    totalCount: 1
   });
 
   jobStore.createJob("sending", {
