@@ -100,11 +100,15 @@ export const startSendingWorker = (): void => {
         if (!sent) {
           const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
           logger.error("recipient send permanently failed", { smtpAccount: selected.account.id, to: recipient?.to, error: msg });
-          if (smtpRepo) {
+          const isHardBounce = msg.includes("550") || msg.includes("553") || msg.includes("554") || msg.includes("556") || msg.toLowerCase().includes("mailbox unavailable") || msg.toLowerCase().includes("domain does not accept mail") || msg.toLowerCase().includes("invalid dns");
+
+          if (smtpRepo && !isHardBounce) {
             const res = await smtpRepo.recordFailureAndMaybeDisable(selected.account.id, 4);
             if (res.disabled) {
               logger.warn("smtp account auto-disabled due to repeated failures", { smtpAccount: selected.account.id, failures: res.failures });
             }
+          } else if (smtpRepo && isHardBounce) {
+            logger.info("skipped penalizing smtp account for hard bounce / invalid email", { smtpAccount: selected.account.id, error: msg });
           }
           if (jobRepo) await jobRepo.markFailed(String(job.id), msg);
           throw lastErr;
