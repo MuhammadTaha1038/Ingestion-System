@@ -649,7 +649,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
     return;
   }
 
-  if (interaction.customId.startsWith(dashboardButtonIds.runCampaign)) {
+  if (interaction.customId === dashboardButtonIds.runCampaign || interaction.customId.startsWith(`${dashboardButtonIds.runCampaign}:page:`)) {
     // Step 1: Show campaign picker — user picks campaign, then dataset picker appears
     await interaction.deferReply({ ephemeral: true });
     if (!config.databaseUrl) {
