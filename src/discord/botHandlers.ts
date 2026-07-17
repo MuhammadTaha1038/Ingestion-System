@@ -818,7 +818,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
 
   if (interaction.customId.startsWith(dashboardButtonIds.smtpList) || interaction.customId === dashboardButtonIds.smtpFailures || interaction.customId === dashboardButtonIds.smtpUsage) {
     if (!config.databaseUrl) {
-      await interaction.editReply("db_required");
+      await interaction.reply({ content: "db_required", ephemeral: true });
       return;
     }
 
@@ -829,7 +829,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
       const repo = new SmtpRepository();
       const list = await repo.listAllAccounts();
       if (!list || list.length === 0) {
-        await interaction.editReply("No SMTP accounts configured.");
+        await interaction.reply({ content: "No SMTP accounts configured.", ephemeral: true });
         return;
       }
 
@@ -857,7 +857,7 @@ export const handleButtonInteraction = async (interaction: ButtonInteraction): P
         rows.push(paginationRow);
       }
 
-      await interaction.update({ content: truncate(formatSmtpRows(list)), components: rows });
+      await interaction.reply({ content: truncate(formatSmtpRows(list)), components: rows, ephemeral: true });
       return;
     }
 
