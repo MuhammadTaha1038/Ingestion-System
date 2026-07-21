@@ -28,7 +28,7 @@ export class JobRepository {
     const status = params.status ?? "pending";
     await this.pool.query(
       "INSERT INTO jobs (id, type, status, dataset_id, campaign_id, total_count) VALUES ($1, $2, $3, $4, $5, $6)",
-      [params.id, params.type, status, params.datasetId ?? null, params.campaignId ?? null, params.totalCount ?? null]
+      [params.id, params.type, status, params.datasetId ?? null, params.campaignId ?? null, params.totalCount ?? 0]
     );
   }
 
