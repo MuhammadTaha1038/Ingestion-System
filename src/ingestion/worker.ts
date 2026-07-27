@@ -3,25 +3,10 @@ import { fileURLToPath } from "url";
 import { join } from "path";
 import { Job } from "bullmq";
 import { createLogger } from "../logging/logger.js";
-import { loadConfig } from "../config/config.js";
-import { DatasetRepository } from "../db/repositories/datasets.js";
-import { JobRepository } from "../db/repositories/jobs.js";
-import { createIngestionWorker } from "../queue/workers.js";
-import { IngestionJobPayload } from "../queue/types.js";
-import {
-  createS3Client,
-  getObjectBytes,
+getObjectBytes,
   getObjectText,
   hasS3Config,
-  putObjectText,
-  resolveS3Location
-} from "../storage/s3.js";
-import { InMemoryDedupStore } from "./dedupStore.js";
-import { PostgresDedupStore } from "./postgresDedupStore.js";
-import { runIngestion } from "./pipeline.js";
-import { IngestionInput, IngestionResult } from "./types.js";
-import { jobStore } from "../jobs/store.js";
-import { resolveIngestionChunks } from "./autoDetect.js";
+  putObjectText, js";
 import { autoSendDatasetIfPossible } from "../campaigns/sendService.js";
 
 const config = loadConfig();
@@ -35,58 +20,29 @@ const jobRepo = config.databaseUrl ? new JobRepository() : null;
 
 if (!config.databaseUrl) {
   logger.warn("DATABASE_URL not set; using in-memory dedup store");
-}
-
-if (!hasS3Config(config.s3)) {
-  logger.warn("S3 config incomplete; using local storage");
-}
-
-const STORAGE_ROOT = join(process.cwd(), "storage");
-const PROCESSED_DIR = join(STORAGE_ROOT, "processed");
-const REPORTS_DIR = join(STORAGE_ROOT, "reports");
-
-const ensureStorageDirs = async (): Promise<void> => {
-  await mkdir(PROCESSED_DIR, { recursive: true });
-  await mkdir(REPORTS_DIR, { recursive: true });
+} : true });
+await mkdir(REPORTS_DIR, { recursive: true });
 };
-
-const fetchSourceBytes = async (sourcePath: string): Promise<{ buffer: Buffer; sourceName: string }> => {
-  if (sourcePath.startsWith("http://") || sourcePath.startsWith("https://")) {
-    const response = await fetch(sourcePath);
-    if (!response.ok) {
-      throw new Error(`fetch_failed:${response.status}`);
+throw new Error(`fetch_failed:${response.status}`);
     }
 
-    const arrayBuffer = await response.arrayBuffer();
-    const url = new URL(sourcePath);
-    const contentDisposition = response.headers.get("content-disposition") ?? "";
-    const filenameMatch = /filename\*?=(?:UTF-8''|\")?([^\";]+)/i.exec(contentDisposition);
-    const sourceName = filenameMatch?.[1]?.trim().replace(/^\"|\"$/g, "") || decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "downloaded-file");
+const arrayBuffer = await response.arrayBuffer();
+const url = new URL(sourcePath);
+const contentDisposition = response.headers.get("content-disposition") ?? "";
+const filenameMatch = /filename\*?=(?:UTF-8''|\")?([^\";]+)/i.exec(contentDisposition);
+const sourceName = filenameMatch?.[1]?.trim().replace(/^\"|\"$/g, "") || decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() ?? "downloaded-file");
 
-    return { buffer: Buffer.from(arrayBuffer), sourceName };
+return { buffer: Buffer.from(arrayBuffer), sourceName };
   }
 
-  if (sourcePath.startsWith("file://")) {
-    const filePath = fileURLToPath(sourcePath);
-    return { buffer: await readFile(filePath), sourceName: filePath.split(/[\\/]/).pop() ?? "file" };
-  }
+if (sourcePath.startsWith("file://")) {
+  const filePath = fileURLToPath(sourcePath);
+  return { buffer: await readFile(filePath), sourceName: filePath.split(/[\\/]/).pop() ?? "file" };
+}
 
-  const looksLikeWindowsPath = /^[a-zA-Z]:[\\/]/.test(sourcePath);
-  if (sourcePath.startsWith("s3://") || (!looksLikeWindowsPath && !sourcePath.includes("://"))) {
-    const cfg = loadConfig();
-    const dynamicS3Enabled = hasS3Config(cfg.s3);
-    const client = dynamicS3Enabled ? createS3Client(cfg.s3) : null;
-
-    if (!client) {
-      throw new Error("s3_not_configured");
-    }
-
-    const location = resolveS3Location(sourcePath, cfg.s3.bucket);
-    return { buffer: await getObjectBytes(client, location.bucket, location.key), sourceName: location.key.split("/").pop() ?? location.key };
-  }
-
-  throw new Error("unsupported_source_path");
-};
+if (!client) {
+  throw new Error("s3_not_configured");
+}
 
 const resolveInputSource = async (input: IngestionInput): Promise<{ buffer: Buffer; sourceName: string }> => {
   if (input.content && input.content.trim().length > 0) {

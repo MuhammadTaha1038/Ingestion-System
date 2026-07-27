@@ -10,22 +10,11 @@ export interface DirectSmtpConfig {
   replyTo?: string;
 }
 
-export const sendDirect = async (
-  cfg: DirectSmtpConfig,
-  to: string,
-  subject: string,
-  html: string,
-  text?: string
+text ?: string
 ) => {
   const transporter = nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port,
-    secure: cfg.secure ?? false,
-    ignoreTLS: cfg.ignoreTLS ?? false,
-    auth: cfg.username ? { user: cfg.username, pass: cfg.password } : undefined,
-    tls: {
-      rejectUnauthorized: false
-    }
   });
 
   const pino = (await import("../logging/logger.js")).createLogger("info");
